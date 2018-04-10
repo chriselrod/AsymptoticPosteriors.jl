@@ -1,1 +1,8 @@
 julia 0.6
+Compat
+Optim
+LineSearches
+ForwardDiff
+SpecialFunctions
+StaticArrays
+DiffResults

@@ -1,5 +1,13 @@
+__precompile__()
+
 module AsymptoticPosteriors
 
-# package code goes here
+using Compat, Optim, LineSearches, ForwardDiff, SpecialFunctions, StaticArrays
+import DiffResults
+
+export AsymptoticPosterior
+
+include("linalg.jl")
+include("types.jl")
 
 end # module
