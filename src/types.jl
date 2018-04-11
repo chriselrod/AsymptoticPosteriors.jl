@@ -1,30 +1,26 @@
 # Chicken and egg problem...or, disable tag checks, and make sure
 # that you have different tags.
-
-struct AsymptoticConfig{R,GR,HR,GC,HC,DGC,DHC,V}
+struct AsymptoticConfig{T,R,GC,HC,FC,L,SL}
     result::R
-    gresult::GR
-    hresult::HR
+    gresult::Vector{T}
     gconfig::GC
     hconfig::HC
-    Dgconfig::DGC
-    Dhconfig::DHC
-    theta::V# a veiw
-end
-struct AsymptoticMAP{N,T,L,C,D,M,O,S}
+    finite_cache::FC
+    swap::RefValue{Int}
     l::L
+end
+struct AsymptoticMAP{N,T,C,D,M,O,S}
     configuration::C
     od::D
     method::M
     options::O
     state::S
     θhat::Vector{T}
-    lmax::Ref{T}
-    base_adjust::Ref{T}
-    lastval::Ref{T}
+    lmax::RefValue{T}
+    base_adjust::RefValue{T}
+    lastval::RefValue{T}
     last_x::Vector{T}
-    quantile::Ref{T}
-    swap::Ref{Int}
+    quantile::RefValue{Float64}
 end
 
 struct AsymptoticPosterior{N,T,MAP<:AsymptoticMAP{N,T},D,M,O,S}
@@ -72,15 +68,15 @@ function arrays_equal(x, y)
 end
 
 
-function AsymptoticMAP(l::L, initial_x::AbstractVector{T}, config, ::Val{N}) where {L,T,N}
-    df = (out, x) -> ForwardDiff.gradient!(out, l, x, config.gconfig, Val{false}())
+function AsymptoticMAP(initial_x::AbstractVector{T}, config, ::Val{N}) where {T,N}
+    df = (out, x) -> ForwardDiff.gradient!(out, config.l, x, config.gconfig, Val{false}())
     fdf = (out, x) -> begin
         config.result.derivs = (out,config.result.derivs[2])
-        ForwardDiff.gradient!(config.result, l, x, config.gconfig, Val{false}())
+        ForwardDiff.gradient!(config.result, config.l, x, config.gconfig, Val{false}())
         DiffResults.value(config.result)
     end
 
-    odmax = OnceDifferentiable(l, df, fdf, initial_x, zero(T), Val{true}())
+    odmax = OnceDifferentiable(config.l, df, fdf, initial_x, zero(T), Val{true}())
     # LBFGS(linesearch=LineSearches.BackTracking())
 
     backtrack = BFGS(LineSearches.InitialStatic(), LineSearches.BackTracking(), x -> Matrix{eltype(x)}(I, length(x), length(x)), Optim.Flat())
@@ -89,16 +85,17 @@ function AsymptoticMAP(l::L, initial_x::AbstractVector{T}, config, ::Val{N}) whe
     options = Optim.InternalUseOptions(backtrack)
     state = Optim.initial_state(backtrack, options, odmax, initial_x)
 
+
     opt = optimize(odmax, initial_x, backtrack, options, state)
     θhat = Optim.minimizer(opt)
-    ForwardDiff.hessian!(config.result, l, θhat, config.hconfig, Val{false}())
+    ForwardDiff.hessian!(config.result, config.l, θhat, config.hconfig, Val{false}())
     herm_det, prof_info, unused = profile_hessian!(DiffResults.hessian(config.result), Val{N}())
     lmax = Optim.minimum(opt)
     base_adjust = inv(herm_det*sqrt(prof_info))
-    AsymptoticMAP(l, config, odmax, backtrack, options, state, θhat, Ref(lmax), Ref(base_adjust), Ref{T}(), Vector{T}(undef, N+1), Ref{Float64}(), Ref(N), Val{N}())
+    AsymptoticMAP(config, odmax, backtrack, options, state, θhat, Ref(lmax), Ref(base_adjust), Ref{T}(), Vector{T}(undef, N+1), Ref{Float64}(), Val{N}())
 end
-function AsymptoticMAP(l::L, configuration::C, od::D, method::M, options::O, state::S, θhat::Vector{T}, lmax::Ref{T}, base_adjust::Ref{T}, lastval::Ref{T}, last_x::Vector{T}, quantile::Ref{T}, swap::Ref{Int}, ::Val{N}) where {N,T,L,C,D,M,O,S}
-    AsymptoticMAP{N,T,L,C,D,M,O,S}(l, configuration, od, method, options, state, θhat, lmax, base_adjust, lastval, last_x, quantile, swap)
+function AsymptoticMAP(configuration::C, od::D, method::M, options::O, state::S, θhat::Vector{T}, lmax::Ref{T}, base_adjust::Ref{T}, lastval::Ref{T}, last_x::Vector{T}, quantile::Ref{Float64}, ::Val{N}) where {N,T,C,D,M,O,S}
+    AsymptoticMAP{N,T,C,D,M,O,S}(configuration, od, method, options, state, θhat, lmax, base_adjust, lastval, last_x, quantile)
 end
 
 # Okay, now I have to figure out creation of once differenitable object and function for solving
@@ -115,19 +112,15 @@ end
 
 function AsymptoticConfig(l::L, initial_x::AbstractVector{T}, ::Val{N}) where {N,T,L}
     chunk = ChunkNotPirate(Val{N}())
-    chunkp1 = ChunkNotPirateP1(Val{N}())
     result = DiffResults.HessianResult(initial_x)
+
+    gresult = Vector{T}(undef, N+1)
+    finite_cache = DiffEqDiffTools.DiffEqDiffTools.GradientCache{Nothing,Nothing,Nothing,:central,T,true}(nothing, nothing, nothing)#Val{:forward}
+
     gconfig = ForwardDiff.GradientConfig(l, initial_x, chunk)
-    hconfig = ForwardDiff.HessianConfig(l, result, initial_x, chunk)
+    hconfig = ForwardDiff.HessianConfig(nothing, result, initial_x, chunk)
 
-    gresult = DiffResults.MutableDiffResult(zero(T), (Vector{T}(undef,N+1),))
-    Dgconfig = ForwardDiff.GradientConfig(nothing, gresult.derivs[1], chunkp1)
-
-    theta = @view(Dgconfig.duals[1:N])
-    hresult = DiffResults.HessianResult(theta)
-    Dhconfig = ForwardDiff.HessianConfig(nothing, hresult, theta, chunk)
-
-    AsymptoticConfig(result, gresult, hresult, gconfig, hconfig, Dgconfig, Dhconfig, theta)
+    AsymptoticConfig(result, gresult, gconfig, hconfig, finite_cache, Ref(N), l)
 end
 
 # To pull off ind swapping, need to swap
@@ -140,52 +133,47 @@ end
 
 function update_grad!(map, x)
     copyto!(map.last_x, x)
-    ForwardDiff.gradient!(map.configuration.gresult, y->LagrangeGrad(map,y), x, map.configuration.Dgconfig)
-    lv = sum(abs2, DiffResults.gradient(map.configuration.gresult))/2
-    map.lastval[] = lv
-    lv
+    DiffEqDiffTools.finite_difference_gradient!(map.configuration.gresult, y->LagrangeGrad(map,y), x, map.configuration.finite_cache)
+    map.lastval[] = sum(abs2, map.configuration.gresult)/2
+    # sum(abs2, map.configuration.gresult)/2
+    # map.lastval[]
+    # lv
+end
+function update_grad!(out, map, x)
+    arrays_equal(x, map.last_x) || update_grad!(map, x)
+    copyto!(out, map.configuration.gresult)
+    nothing
 end
 
-function AsymptoticPosterior(map::AsymptoticMAP{N,T}) where {T, N}
+
+function AsymptoticPosterior(map::M) where {T, N, M <: AsymptoticMAP{N,T}}
     F = x -> begin
         arrays_equal(x, map.last_x) ? map.lastval[] : update_grad!(map, x)
     end
     G = (out, x) -> begin
-        if arrays_equal(x, map.last_x)
-            grad = DiffResults.gradient(map.configuration.gresult)
-            out === grad || copyto!(out, grad) #Does this make sense? Could the two objects end up being one and the same?
-        else
-            map.configuration.gresult.derivs = (out,)
-            update_grad!(map, x)
-        end
+        update_grad!(out, map, x)
         out
     end
     FG = (out, x) -> begin
-        if arrays_equal(x, map.last_x)
-            grad = DiffResults.gradient(map.configuration.gresult)
-            out === grad || copyto!(out, grad) #Does this make sense? Could the two objects end up being one and the same?
-        else
-            map.configuration.gresult.derivs = (out,)
-            update_grad!(map, x)
-        end
+        update_grad!(out, map, x)
         map.lastval[]
     end
 
-    initial_x = Vector{T}(undef, N+1)
+    x = Vector{T}(undef, N+1)
     @inbounds begin
         for i ∈ 1:N
-            initial_x[i] = map.θhat[i]
+            x[i] = map.θhat[i]
         end
-        initial_x[end] = zero(T)
+        x[end] = zero(T)
     end
 
-    odmax = OnceDifferentiable(F, G, FG, initial_x, zero(T), Val{true}())
-    backtrack = BFGS(LineSearches.InitialStatic(), LineSearches.BackTracking(), x -> Matrix{eltype(x)}(I, length(x), length(x)), Optim.Flat())
+    odprof = OnceDifferentiable(F, G, FG, x, zero(T), Val{true}())
+    backtrack = BFGS(LineSearches.InitialStatic(), LineSearches.BackTracking(), y -> Matrix{T}(I, length(y), length(y)), Optim.Flat())
     # backtrack = LBFGS(10, LineSearches.InitialStatic(), LineSearches.BackTracking(), nothing, (P, x) -> nothing, Optim.Flat(), true)
     options = Optim.InternalUseOptions(backtrack)
-    state = Optim.initial_state(backtrack, options, odmax, initial_x)
+    state = Optim.initial_state(backtrack, options, odprof, x)
 
-    AsymptoticPosterior(map, initial_x, odmax, backtrack, options, state, Val{N}())
+    AsymptoticPosterior(map, x, odprof, backtrack, options, state, Val{N}())
 end
 
 function AsymptoticPosterior(map::MAP, initial_x::Vector{T}, od::D, method::M, options::O, state::S, ::Val{N}) where {N,T,MAP<:AsymptoticMAP{N,T},D,M,O,S}
@@ -199,25 +187,13 @@ end
 
 # The Lagrange Function, whose gradient we're zeroing.
 function LagrangeGrad(map::AsymptoticMAP{N}, x) where N
-    @show x
-    @show typeof(x)
-    @show map.configuration.theta
-    @show typeof(map.configuration.theta)
-    update_hessian!(map)
-    drv = DiffResults.value(map.configuration.hresult)
-    diff = (rstar_p(map,map.configuration.theta)-map.quantile[])
-    @show diff
-    @show typeof(diff)
-    @show x[end]
-    @show typeof(x[end])
-    dprod = diff * x[end]
-    dprod - drv
-    # (rstar_p(map,map.configuration.theta)-map.quantile[]) * x[end] - DiffResults.value(map.configuration.hresult)
+    theta = @view(x[1:N])
+    update_hessian!(map, theta)
+    (rstar_p(map, theta)-map.quantile[]) * x[end] - DiffResults.value(map.configuration.result)
 end
 
-function update_hessian!(map::AsymptoticMAP{N}) where N
-    ForwardDiff.hessian!(map.configuration.hresult, y -> map.l(swap!(y, map.swap[], N)), map.configuration.theta, map.configuration.Dhconfig, Val{false}())
-    nothing
+function update_hessian!(map::AsymptoticMAP{N}, theta) where N
+    ForwardDiff.hessian!(map.configuration.result, map.configuration.l(swap!(x, map.configuration.swap[], N)), theta, map.configuration.hconfig, Val{false}())
 end
 
 Φ⁻¹(x) = √2*erfinv(2x-1)
@@ -230,18 +206,28 @@ function bound(posterior::AsymptoticPosterior{N}, param::Integer, alpha) where N
 end
 
 function rp(map, theta)
-    sign(map.θhat[map.swap[]]-theta[end]) * sqrt(2*(map.lmax[]-DiffResults.value(map.configuration.hresult)))
+    sqrt(2*(DiffResults.value(map.configuration.result)-map.lmax[]))
 end
 
 # This is what is set to phi-inv
 function rstar_p(map, theta)
     r = rp(map, theta)
-    r + log(qb(map, theta)/r)/r
+    sign(map.θhat[map.configuration.swap[]]-theta[end])*(r + log(abs(qb(map, theta)/r))/r)
 end
 
+# function rp(map, theta)
+#     sign(map.θhat[map.configuration.swap[]]-theta[end])*sqrt(2*(DiffResults.value(map.configuration.result)-map.lmax[]))
+# end
+
+# # This is what is set to phi-inv
+# function rstar_p(map, theta)
+#     r = rp(map, theta)
+#     r + log(qb(map, theta)/r)/r
+# end
+
 function qb(map::AsymptoticMAP{N}, theta) where N
-    prof_score = DiffResults.gradient(map.configuration.hresult)[end]
-    root_herm_det, prof_info, prof_info_uncorrected = profile_hessian!(DiffResults.hessian(map.configuration.hresult), Val{N}()) # destroys hessian
+    prof_score = DiffResults.gradient(map.configuration.result)[end]
+    root_herm_det, prof_info, prof_info_uncorrected = profile_hessian!(DiffResults.hessian(map.configuration.result), Val{N}()) # destroys hessian
     root_herm_det * map.base_adjust[] * prof_score * prof_info / prof_info_uncorrected
 end
 
@@ -283,10 +269,5 @@ end
 @generated function profile_hessian!(hess, ::Val{D}) where D
     _profile_hessian!(D)
 end
-
-# More reliable than Base.@pure ???
-@generated Valm(::Val{N}) where N = Val{N-1}()
-# LinearAlgebra.LAPACK.potrf!('U', x) #Only good for LinearAlgebra.BLAS.BlasFloat
-# LinearAlgebra.LAPACK.trtri!('U', 'N', x)
 
 

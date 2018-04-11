@@ -1,4 +1,9 @@
 
+
+# LinearAlgebra.LAPACK.potrf!('U', x) #Only good for LinearAlgebra.BLAS.BlasFloat
+# LinearAlgebra.LAPACK.trtri!('U', 'N', x)
+
+
 function chol!(A::AbstractMatrix, ::Type{UpperTriangular}, ::Val{N}) where N
     @inbounds @fastmath begin
         for k = 1:N

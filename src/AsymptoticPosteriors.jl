@@ -2,8 +2,9 @@ __precompile__()
 
 module AsymptoticPosteriors
 
-using Compat, Optim, LineSearches, ForwardDiff, SpecialFunctions, StaticArrays
+using Compat, Optim, LineSearches, ForwardDiff, SpecialFunctions, StaticArrays, DiffEqDiffTools
 import DiffResults
+import Base.RefValue
 
 export AsymptoticPosterior
 

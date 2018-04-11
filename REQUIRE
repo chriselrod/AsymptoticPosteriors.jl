@@ -6,3 +6,4 @@ ForwardDiff
 SpecialFunctions
 StaticArrays
 DiffResults
+DiffEqDiffTools
