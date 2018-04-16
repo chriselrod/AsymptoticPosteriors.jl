@@ -197,3 +197,101 @@ function inv!(U_inverse::AbstractMatrix, U::AbstractMatrix)
     end
 end
 
+"""
+Returns:
+(1) the square root of the determinant of the nuisance parameter block of the hessian |j_{λ,λ}|^{1/2}
+(2) 
+"""
+function profile_hessian!(A::AbstractMatrix{T}, ::Val{N}) where {N,T}
+    out = one(T)
+    prof_info_uncorrected = A[end]
+    @inbounds @fastmath begin
+        for k = 1:N-1
+            for i = 1:k - 1
+                A[k,k] -= A[i,k]'A[i,k]
+            end
+            Akk = chol!(A[k,k], UpperTriangular)
+            A[k,k] = Akk
+            out *= Akk
+            AkkInv = inv(Akk') # inv(copy(Akk')) # inv isn't in place, why copy? Transpose != problem?
+            for j = k + 1:N
+                for i = 1:k - 1
+                    A[k,j] -= A[i,k]'A[i,j]
+                end
+                A[k,j] = AkkInv*A[k,j]
+            end
+        end
+        for i = 1:N - 1
+            A[N,N] -= A[i,N]'A[i,N]
+        end
+        prof = A[N,N]
+        Akk = chol!(A[N,N], UpperTriangular)
+        A[N,N] = Akk
+        AkkInv = inv(Akk') # inv(copy(Akk')) # inv isn't in place, why copy? Transpose != problem?
+    end
+    out, prof, prof_info_uncorrected
+end
+
+
+
+function submat(A::AbstractMatrix{T}, k) where T
+    n = size(A,1)
+    out = Matrix{T}(undef, n-1,n-1)
+    for i ∈ 1:k-1
+        for j ∈ 1:k-1
+            out[j,i] = A[j,i]
+        end
+        for j ∈ 1+k:n
+            out[j-1,i] = A[j,i]
+        end
+    end
+    for i ∈ k+1:n
+        for j ∈ 1:k-1
+            out[j,i-1] = A[j,i]
+        end
+        for j ∈ 1+k:n
+            out[j-1,i-1] = A[j,i]
+        end
+    end
+    out
+end
+
+@generated function estimate_stds(A::AbstractMatrix{T}, ::Val{N}) where {T,N}
+    quote
+        out = Vector{T}(undef, $N)
+        # @fastmath @inbounds begin
+        @inbounds begin
+            # Base.Cartesian.@nexprs $N i -> (out_i = zero(T))
+            Base.Cartesian.@nexprs $N i -> begin
+                Base.Cartesian.@nexprs i-1 j -> begin
+                    out_j += A[j,i]*A[j,i]
+                end
+                out_i = A[i,i]*A[i,i]
+            end
+            Base.Cartesian.@nexprs $N i -> (out[i] = sqrt(out_i))
+        end
+        out
+    end
+end
+
+
+# julia> det(xx).*diag(inv(xx))
+# 4-element Array{Float64,1}:
+#  34.9658
+#  44.7261
+#  66.1783
+#  67.9918
+
+# julia> det.(submat.((xx,),1:4))
+# 4-element Array{Float64,1}:
+#  34.9658
+#  44.7261
+#  66.1783
+#  67.9918
+
+# julia> det(xx) .* abs2.(estimate_stds(inv(chol(xx)),Val(4)))
+# 4-element Array{Float64,1}:
+#  34.9658
+#  44.7261
+#  66.1783
+#  67.9918
