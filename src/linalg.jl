@@ -27,18 +27,43 @@ function choldet!(A::AbstractMatrix{T}, ::Type{UpperTriangular}, ::Val{N}) where
     out = one(T)
     @inbounds @fastmath begin
         for k = 1:N
+            Akk = A[k,k]
             for i = 1:k - 1
-                A[k,k] -= A[i,k]'A[i,k]
+                Akk -= A[i,k]'A[i,k]
             end
-            Akk = chol!(A[k,k], UpperTriangular)
+            Akk = chol!(Akk, UpperTriangular)
             A[k,k] = Akk
             out *= Akk
             AkkInv = inv(Akk') # inv(copy(Akk')) # inv isn't in place, why copy? Transpose != problem?
             for j = k + 1:N
+                Akj = A[k,j]
                 for i = 1:k - 1
-                    A[k,j] -= A[i,k]'A[i,j]
+                    Akj -= A[i,k]'A[i,j]
                 end
-                A[k,j] = AkkInv*A[k,j]
+                A[k,j] = AkkInv*Akj
+            end
+        end
+    end
+    out
+end
+function choldet!(B::AbstractMatrix{T}, A::AbstractMatrix{T}, ::Type{UpperTriangular}, ::Val{N}) where {N,T}
+    out = one(T)
+    @inbounds @fastmath begin
+        for k = 1:N
+            Bkk = A[k,k]
+            for i = 1:k - 1
+                Bkk -= A[i,k]'A[i,k]
+            end
+            Bkk = chol!(Bkk, UpperTriangular)
+            B[k,k] = Bkk
+            out *= Bkk
+            BkkInv = inv(Bkk') # inv(copy(Akk')) # inv isn't in place, why copy? Transpose != problem?
+            for j = k + 1:N
+                Bkj = A[k,j]
+                for i = 1:k - 1
+                    Bkj -= A[i,k]'A[i,j]
+                end
+                B[k,j] = AkkInv*Bkj
             end
         end
     end

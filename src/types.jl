@@ -240,6 +240,10 @@ function bound(posterior::AsymptoticPosterior{N}, param::Integer, alpha) where N
     optimize(posterior.od, posterior.state.x, posterior.method, posterior.options, posterior.state)
 end
 
+"""
+Copies leading n x n principal submatrix of B into A, but swaps contents of row and column k and n, where k < n.
+
+"""
 function swap!(A::Matrix{T}, B::Matrix{T}, k::Int, n::Int) where T
     @inbounds begin
         for i ∈ 1:k-1
@@ -287,7 +291,7 @@ function set_I!(x::AbstractMatrix{T}, ::Val{N}) where {N,T}
         for j ∈ 1:i-1
             x[j,i] = zero(T)
         end
-        x[i,i] = one(T)/10^4
+        x[i,i] = one(T)#/10^4 10^4 is a little overzealous, isn't it?
         for j ∈ i+1:N
             x[j,i] = zero(T)
         end
