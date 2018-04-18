@@ -21,8 +21,6 @@ struct LeanDifferentiable{{N,T,A<:AbstractArray{T},C} <: ForwardDiffDifferentiab
     x_df::A # x used to evaluate df (stored in DF)
     x_h::A #??
     config::C
-    # f_calls::Vector{Int}
-    # df_calls::Vector{Int}
 end
 
 # struct ProfileDifferentiable{N,T,A<:AbstractArray{T},C} <: ForwardDiffDifferentiable
@@ -106,7 +104,7 @@ function (c::Configuration)(y, z)
     DiffResults.value!(c.result, ForwardDiff.value(DiffResults.value(c.inner_result)))
     y
 end
-function hessian!(c::Configuration, x::AbstractArray) where {T,CHK}
+function hessian!(c::Configuration, x::AbstractArray)
     ForwardDiff.jacobian!(DiffResults.hessian(c.result), c, DiffResults.gradient(c.result), x, c.jacobian_config, Val{false}())
     DiffResults.hessian(c.result)
 end

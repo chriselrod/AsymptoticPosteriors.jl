@@ -216,7 +216,6 @@ function update_hessian!(map::AsymptoticMAP{N}, theta) where N
     @show DiffResults.hessian(map.configuration.result)
 end
 
-Φ⁻¹(x) = √2*erfinv(2x-1)
 
 function bound(posterior::AsymptoticPosterior{N}, param::Integer, alpha) where N
     @boundscheck @assert param <= N

@@ -71,35 +71,18 @@ end
 
 
 function find_zero!(state, fs::F, x0, method::UnivariateZeroMethod, options::UnivariateZeroOptions) where F
-    init_state!(state, method, fs, x0)
+    reset_state!(state, method, fs, x0)
     find_zero(method, fs, state, options)#, [state.xn1], [state.fxn1])
 end
 function find_zero(fs::F, x0, method::UnivariateZeroMethod, options::UnivariateZeroOptions) where F
-    state = init_state(method, fs, x0)
+    state = UnivariateZeroStateBase(method, fs, x0)
     find_zero(method, fs, state, options)#, [state.xn1], [state.fxn1])
 end
 
-function init_state(method::AbstractBisection, fs::F, x::Tuple{T,T}) where {T <: Real, F}
+
+function reset_state!(state, method::AbstractBisection, fs::F, x::Tuple{T,T}) where {T <: Real, F}
     x0, x2 = x
-    y0 = fs(x0)
-    y2 = fs(x2)
-
-    # @assert sign(y0) != sign(y2)
-
-    state = UnivariateZeroStateBase(x0, x2,
-                                    y0, y2,
-                                    0, 2,
-                                    false, false, false, false, "")
-    state
-end
-
-function init_state!(state, method::AbstractBisection, fs::F, x::Tuple{T,T}) where {T <: Real, F}
-    x0, x2 = x
-    y0 = fs(x0)
-    y2 = fs(x2)
-
-    # @assert sign(y0) != sign(y2)
-    reset_state!(state, x0, x2, y0, y2)
+    reset_state!(state, x0, x2, fs(x0), fs(x2))
 end
 
 abstract type UnivariateZeroState{T,S} end
@@ -117,8 +100,20 @@ mutable struct UnivariateZeroStateBase{T,S,AS<:AbstractString} <: UnivariateZero
     convergence_failed::Bool
     message::AS
 end
+function UnivariateZeroStateBase(method::AbstractBisection, fs::F, x::Tuple{T,T}) where {T <: Real, F}
+    x0, x2 = x
+    y0 = fs(x0)
+    y2 = fs(x2)
 
-function reset_state!(state, x0, x2, y0, y2)
+    # @assert sign(y0) != sign(y2)
+
+    UnivariateZeroStateBase(x0, x2,
+                            y0, y2,
+                            0, 2,
+                            false, false, false, false, "")
+end
+
+function reset_state!(state::UnivariateZeroState{T,S}, x0::T, x2::T, y0::S, y2::S) where {T,S}
     state.xn1 = x0
     state.xn0 = x2
     state.fxn1 = y0
@@ -282,14 +277,14 @@ function assess_convergence(method, state, options)
         return true
     end
 
-    λ = max(one(real(xn1)), norm(xn1))
+    λ = max(options.abstol, max(one(real(xn1)), norm(xn1)) * options.reltol) 
     
-    if  norm(fxn1) <= max(options.abstol, λ * options.reltol)
+    if  norm(fxn1) <= λ
         state.f_converged = true
         return true
     end
 
-    if check_approx(xn1, xn0, options.xreltol, options.xabstol) && norm(fxn1) <= cbrt(max(options.abstol, λ * options.reltol))
+    if check_approx(xn1, xn0, options.xreltol, options.xabstol) && norm(fxn1) <= cbrt(λ)
         state.x_converged = true
         return true
     end
