@@ -6,6 +6,12 @@ using Base.Test
 
 
 
+using AsymptoticPosteriors
+include("/home/chris/Documents/progwork/julia/NGS.jl")
+f3(x) = NGS(cdb4, x, Val{8}())
+@time ap = AsymptoticPosterior(f3, initial_x, Val(8));
+quantile(ap, 0.025)
+
 
 using Revise, AsymptoticPosteriors
 using Traceur

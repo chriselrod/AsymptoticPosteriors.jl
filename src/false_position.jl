@@ -72,11 +72,11 @@ end
 
 function find_zero!(state, fs::F, x0, method::UnivariateZeroMethod, options::UnivariateZeroOptions) where F
     reset_state!(state, method, fs, x0)
-    find_zero(method, fs, state, options)#, [state.xn1], [state.fxn1])
+    find_zero!(method, fs, state, options)#, [state.xn1], [state.fxn1])
 end
 function find_zero(fs::F, x0, method::UnivariateZeroMethod, options::UnivariateZeroOptions) where F
     state = UnivariateZeroStateBase(method, fs, x0)
-    find_zero(method, fs, state, options)#, [state.xn1], [state.fxn1])
+    find_zero!(state, fs, method, options)#, [state.xn1], [state.fxn1])
 end
 
 
@@ -88,8 +88,10 @@ end
 abstract type UnivariateZeroState{T,S} end
 
 mutable struct UnivariateZeroStateBase{T,S,AS<:AbstractString} <: UnivariateZeroState{T,S}
+    # xn2::T
     xn1::T
     xn0::T
+    # fxn2::S
     fxn1::S
     fxn0::S
     steps::Int
@@ -128,11 +130,11 @@ function reset_state!(state::UnivariateZeroState{T,S}, x0::T, x2::T, y0::S, y2::
     state
 end
 
-function find_zero(method::UnivariateZeroMethod, fs::F, state::UnivariateZeroState, options::UnivariateZeroOptions) where F
+function find_zero!(state::UnivariateZeroState, fs::F, method::UnivariateZeroMethod, options::UnivariateZeroOptions) where F
     ## XXX Should just deprecate this in favor of FalsePosition method XXX
     while true
         
-        val = assess_convergence(method, state, options)
+        val = assess_convergence(state, options)
 
 
 
@@ -202,7 +204,7 @@ function update_state(method::FalsePosition, fs::F, o, options) where F
     end
     b, fb = x, fx
 
-    
+    #xn0 are old, xn1 are new.
     o.xn0, o.xn1 = a, b 
     o.fxn0, o.fxn1 = fa, fb
     
@@ -240,10 +242,7 @@ const galdino = Dict{Union{Int,Symbol},Function}(:1 => (fa, fb, fx) -> fa*fb/(fb
 end
 
 
-
-
-## has UnivariateZeroProblem converged?
-function assess_convergence(method, state, options)
+function assess_convergence(state, options)
 
     xn0, xn1 = state.xn0, state.xn1
     fxn0, fxn1 = state.fxn0, state.fxn1
@@ -277,13 +276,15 @@ function assess_convergence(method, state, options)
         return true
     end
 
-    λ = max(options.abstol, max(one(real(xn1)), norm(xn1)) * options.reltol) 
+    λ = convergenceλ(xn1, options)
     
+    #is fxn1 close enough to 0?
     if  norm(fxn1) <= λ
         state.f_converged = true
         return true
     end
 
+    # Or are xn1 and xn0 close enough to one another?
     if check_approx(xn1, xn0, options.xreltol, options.xabstol) && norm(fxn1) <= cbrt(λ)
         state.x_converged = true
         return true
@@ -300,5 +301,7 @@ function assess_convergence(method, state, options)
     return false
 end
 
+@inline convergenceλ(x, options) = max(options.abstol, max(one(real(x)), norm(x)) * options.reltol) 
+@inline check_approx(x, y, rtol, atol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
 
-check_approx(x, y, rtol, atol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+

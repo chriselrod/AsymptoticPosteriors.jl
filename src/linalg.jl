@@ -52,7 +52,7 @@ function choldet!(B::AbstractMatrix{T}, A::AbstractMatrix{T}, ::Type{UpperTriang
         for k = 1:N
             Bkk = A[k,k]
             for i = 1:k - 1
-                Bkk -= A[i,k]'A[i,k]
+                Bkk -= B[i,k]'B[i,k]
             end
             Bkk = chol!(Bkk, UpperTriangular)
             B[k,k] = Bkk
@@ -61,9 +61,9 @@ function choldet!(B::AbstractMatrix{T}, A::AbstractMatrix{T}, ::Type{UpperTriang
             for j = k + 1:N
                 Bkj = A[k,j]
                 for i = 1:k - 1
-                    Bkj -= A[i,k]'A[i,j]
+                    Bkj -= B[i,k]'B[i,j]
                 end
-                B[k,j] = AkkInv*Bkj
+                B[k,j] = BkkInv*Bkj
             end
         end
     end

@@ -5,23 +5,35 @@
 @generated ValM1(::Val{N}) where N = Val{N-1}()
 
 abstract type ForwardDiffDifferentiable <: NLSolversBase.AbstractObjective end
+abstract type Configuration end
 
-
-struct Configuration{T,T2,V,ND,DJ,DG,DG,F}
+struct GradientConfiguration{T,V,ND,DG,F} <: Configuration
     f::F
-    result::DiffResults.MutableDiffResult{V,Tuple{Vector{V},Matrix{V}}}
-    inner_result::DiffResults.MutableDiffResult{Dual{T,V,ND},Tuple{Vector{Dual{T,V,ND}}}}
-    jacobian_config::ForwardDiff.JacobianConfig{T,V,ND,DJ}
-    gradient_config::ForwardDiff.GradientConfig{T,Dual{T,V,ND},ND,DG}
-    gconfig::ForwardDiff.GradientConfig{T2,V,ND,DG}
+    result::DiffResults.MutableDiffResult{2,V,Tuple{Vector{V},Matrix{V}}}
+    gconfig::ForwardDiff.GradientConfig{T,V,ND,DG}
 end
 
-struct LeanDifferentiable{{N,T,A<:AbstractArray{T},C} <: ForwardDiffDifferentiable
+struct HessianConfiguration{T,T2,V,ND,DJ,DG,DG2,F} <: Configuration
+    f::F
+    result::DiffResults.MutableDiffResult{2,V,Tuple{Vector{V},Matrix{V}}}
+    inner_result::DiffResults.MutableDiffResult{1,ForwardDiff.Dual{T,V,ND},Tuple{Vector{ForwardDiff.Dual{T,V,ND}}}}
+    jacobian_config::ForwardDiff.JacobianConfig{T,V,ND,DJ}
+    gradient_config::ForwardDiff.GradientConfig{T,ForwardDiff.Dual{T,V,ND},ND,DG}
+    gconfig::ForwardDiff.GradientConfig{T2,V,ND,DG2}
+end
+struct LeanDifferentiable{N,T,A<:AbstractArray{T},C<:Configuration} <: ForwardDiffDifferentiable
     x_f::A # x used to evaluate f (stored in F)
     x_df::A # x used to evaluate df (stored in DF)
     x_h::A #??
     config::C
 end
+struct GDifferentiable{N,T,A<:AbstractArray{T},C<:GradientConfiguration} <: ForwardDiffDifferentiable
+    x_f::A # x used to evaluate f (stored in F)
+    x_df::A # x used to evaluate df (stored in DF)
+    config::C
+end
+
+Optim.iscomplex(::ForwardDiffDifferentiable) = false
 
 # struct ProfileDifferentiable{N,T,A<:AbstractArray{T},C} <: ForwardDiffDifferentiable
 #     x_f::Vector{T} # x used to evaluate f (stored in F)
@@ -35,17 +47,18 @@ end
 #     # df_calls::Vector{Int}
 # end
 
+HessianConfiguration(f::F, x, ::Val{N}) where {F,N} = Configuration(f, x, Val{N}()) 
 function Configuration(f::F, x::AbstractArray{T}, ::Val{N}) where {F,T,N}
-
     result = DiffResults.HessianResult(x)
-
     chunk = Chunk(Val{N}())
     tag = ForwardDiff.Tag(f, T)
+
     jacobian_config = ForwardDiff.JacobianConfig((f,ForwardDiff.gradient), DiffResults.gradient(result), x, chunk, tag)
     gradient_config = ForwardDiff.GradientConfig(f, jacobian_config.duals[2], chunk, tag)
+    inner_result = DiffResults.GradientResult(jacobian_config.duals[2])
     gconfig = ForwardDiff.GradientConfig(f, x, chunk, tag)
 
-    Configuration(f, result, inner_result, jacobian_config, gradient_config, gconfig)
+    HessianConfiguration(f, result, inner_result, jacobian_config, gradient_config, gconfig)
 end
 LeanDifferentiable(f::F, ::Val{N}) where {F,N} = LeanDifferentiable(f, Vector{Float64}(undef, N), Val{N}())
 function LeanDifferentiable(f::F, x::AbstractArray{T}, ::Val{N}) where {F,T,N}
@@ -53,6 +66,9 @@ function LeanDifferentiable(f::F, x::AbstractArray{T}, ::Val{N}) where {F,T,N}
 end
 function LeanDifferentiable(x_f::A,x_df::A,x_h::A,config::C,::Val{N}) where {T,A<:AbstractArray{T},C,N}
     LeanDifferentiable{N,T,A,C}(x_f, x_df, x_h, config)
+end
+function GDifferentiable(x_f::A,x_df::A,config::C,::Val{N}) where {T,A<:AbstractArray{T},C,N}
+    GDifferentiable{N,T,A,C}(x_f, x_df, config)
 end
 
 # ProfileDifferentiable(f::F, ::Val{N}) where {F,N} = ProfileDifferentiable(f, Vector{Float64}(undef, N), Val{N}())
@@ -65,7 +81,6 @@ end
 # end
 
 
-
 DiffResults.value!(obj::ForwardDiffDifferentiable, x::Real) = DiffResults.value!(obj.config.result, x)
 
 NLSolversBase.value(obj::ForwardDiffDifferentiable) = DiffResults.value(obj.config.result)
@@ -74,17 +89,17 @@ NLSolversBase.gradient(obj::ForwardDiffDifferentiable, i::Integer) = DiffResults
 NLSolversBase.hessian(obj::ForwardDiffDifferentiable) = DiffResults.hessian(obj.config.result)
 
 
-f(obj::LeanDifferentiable, x) = obj.config.f(x)
+f(obj::ForwardDiffDifferentiable, x) = obj.config.f(x)
 # function f(obj::ProfileDifferentiable, x)
 
 
 # end
 
 function df(obj::ForwardDiffDifferentiable, x)
-    ForwardDiff.gradient!(gradient(obj), obj.config.f, x, obj.config.gconfig, Val{false}())
+    ForwardDiff.gradient!(NLSolversBase.gradient(obj), obj.config.f, x, obj.config.gconfig, Val{false}())
 end
 function fdf(obj::ForwardDiffDifferentiable, x)
-    obj.config.result.derivs = (gradient(obj), hessian(obj))
+    obj.config.result.derivs = (NLSolversBase.gradient(obj), NLSolversBase.hessian(obj))
     ForwardDiff.gradient!(obj.config.result, obj.config.f, x, obj.config.gconfig, Val{false}())
     DiffResults.value(obj.config.result)
 end
@@ -98,13 +113,13 @@ end
 #     Configuration(f, result, inner_result, jacobian_config, gradient_config, gconfig)
 # end
 
-function (c::Configuration)(y, z)
+function (c::HessianConfiguration)(y, z)
     c.inner_result.derivs = (y,) #Already true?
     ForwardDiff.gradient!(c.inner_result, c.f, z, c.gradient_config, Val{false}())
     DiffResults.value!(c.result, ForwardDiff.value(DiffResults.value(c.inner_result)))
     y
 end
-function hessian!(c::Configuration, x::AbstractArray)
+function hessian!(c::HessianConfiguration, x::AbstractArray)
     ForwardDiff.jacobian!(DiffResults.hessian(c.result), c, DiffResults.gradient(c.result), x, c.jacobian_config, Val{false}())
     DiffResults.hessian(c.result)
 end
@@ -190,7 +205,7 @@ function NLSolversBase.value_gradient!(obj::ForwardDiffDifferentiable, x)
     elseif x != obj.x_df
         NLSolversBase.gradient!!(obj, x)
     end
-    value(obj)
+    NLSolversBase.value(obj)
 end
 function NLSolversBase.value_gradient!!(obj::ForwardDiffDifferentiable, x)
     # obj.f_calls .+= 1
@@ -211,12 +226,12 @@ function NLSolversBase.hessian!!(obj::ForwardDiffDifferentiable, x)
     hessian!(obj.config, x)
 end
 
-struct LightOptions{T}
+struct LightOptions{T} #add iterations?
     x_tol::T
     f_tol::T
     g_tol::T
 end
-LightOptions() = LightOptions(0.0,0.0,1e-8)
+LightOptions() = LightOptions{Float64}(0.0,0.0,1e-8)
 
 
 
@@ -232,7 +247,7 @@ LightOptions() = LightOptions(0.0,0.0,1e-8)
 #     s::Tx
 #     @add_linesearch_fields()
 # end
-function initial_state!(state, method::BFGS, d, initial_x::AbstractArray{T}) where T
+function initial_state!(state, method::Optim.BFGS, d, initial_x::AbstractArray{T}) where T
     n = length(initial_x)
     copyto!(state.x, initial_x)
     Optim.retract!(method.manifold, initial_x)
@@ -263,7 +278,7 @@ function uninitialized_state(initial_x::AbstractArray{T}) where T
         similar(initial_x), # Store changes in position in state.dx
         similar(initial_x), # Store changes in gradient in state.dg
         similar(initial_x), # Buffer stored in state.u
-        Matrix{T}(undef, length(x), length(x)), # Store current invH in state.invH
+        Matrix{T}(undef, length(initial_x), length(initial_x)), # Store current invH in state.invH
         similar(initial_x), # Store current search direction in state.s
         T(NaN),            # Keep track of previous descent value ⟨∇f(x_{k-1}), s_{k-1}⟩
         similar(initial_x), # Buffer of x for line search in state.x_ls
@@ -271,7 +286,7 @@ function uninitialized_state(initial_x::AbstractArray{T}) where T
 end
 
 function optimize_light(d::D, initial_x::Tx, method::M,
-                  options::Union{Options,LightOptions} = LightOptions(),
+                  options::Union{Optim.Options,LightOptions} = LightOptions(),
                   state = Optim.initial_state(method, options, d, initial_x)) where {D<:NLSolversBase.AbstractObjective, M<:Optim.AbstractOptimizer, Tx <: AbstractArray}
 
     f_limit_reached, g_limit_reached, h_limit_reached = false, false, false
@@ -283,7 +298,7 @@ function optimize_light(d::D, initial_x::Tx, method::M,
     # prepare iteration counter (used to make "initial state" trace entry)
     iteration = 0
 
-    while !converged && iteration < options.iterations
+    while !converged && iteration < 200#options.iterations #uncomment if you add back iterations field to LightOptions
         iteration += 1
 
         Optim.update_state!(d, state, method) && break # it returns true if it's forced by something in update! to stop (eg dx_dg == 0.0 in BFGS, or linesearch errors)
