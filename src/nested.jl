@@ -248,7 +248,7 @@ function rstar_p(pl::ProfileLikelihood{N}, theta, i = profile_ind(pl)) where N
 
     setswap!(pl, i)
     hessian!(pl.map.od.config, pl.map.buffer)
-    @show hessian(pl)
+    # @show hessian(pl)
 
     r = rp(pl, theta, i)
     # println("\n\n\nCalling qb:")
@@ -316,13 +316,13 @@ function set_buffer_to_profile!(pl::ProfileLikelihood{N}, i = profile_ind(pl)) w
         for j in 1:i-1
             pl.map.buffer[j] = pl.nuisance[j]
         end
-        pl.map.buffer[i] = pl.nuisance[N-1]
         if i != N
+            pl.map.buffer[i] = pl.nuisance[N-1]
             for j in i+1:N-1
                 pl.map.buffer[j] = pl.nuisance[j-1]
             end
-            pl.map.buffer[N] = profile_val(pl)
         end
+        pl.map.buffer[N] = profile_val(pl)
     end
 end
 

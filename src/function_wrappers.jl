@@ -43,19 +43,19 @@ end
 #     end
 #     - pw.f(pw.z)
 # end
-function (pw::ProfileWrapper{N})(w) where N #fallback method
-    wc = Vector{eltype(w)}(undef, N)
-    @inbounds begin
-        for i in 1:pw.i[]-1
-            wc[i] = w[i]
-        end
-        wc[pw.i[]] = pw.v[]
-        for i in pw.i[]+1:N
-            wc[i] = w[i-1]
-        end
-    end
-    - pw.f(wc)
-end
+# function (pw::ProfileWrapper{N})(w) where N #fallback method
+#     wc = Vector{eltype(w)}(undef, N)
+#     @inbounds begin
+#         for i in 1:pw.i[]-1
+#             wc[i] = w[i]
+#         end
+#         wc[pw.i[]] = pw.v[]
+#         for i in pw.i[]+1:N
+#             wc[i] = w[i-1]
+#         end
+#     end
+#     - pw.f(wc)
+# end
 function set!(pw::ProfileWrapper, v, i::Int)
     pw.v[] = v
     pw.i[] = i
