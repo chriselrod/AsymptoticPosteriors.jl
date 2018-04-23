@@ -235,12 +235,20 @@ function rp(pl::ProfileLikelihood, x, i = profile_ind(pl))
     copysign( sqrt(2(pl.nlmax[]-pl.map.nlmax[])), pl.map.θhat[i] - x)
 end
 
-function rstar_p(pl::ProfileLikelihood, theta, i = profile_ind(pl))
+function rstar_p(pl::ProfileLikelihood{N}, theta, i = profile_ind(pl)) where N
 
     pdf(pl, theta, i)
     set_buffer_to_profile!(pl, i)
+
+    # pl.map.buffer[i], pl.map.buffer[N] = pl.map.buffer[N], pl.map.buffer[i]
+    # setswap!(pl, N)
+    # hessian!(pl.map.od.config, pl.map.buffer)
+    # @show hessian(pl)
+    # set_buffer_to_profile!(pl, i)
+
     setswap!(pl, i)
     hessian!(pl.map.od.config, pl.map.buffer)
+    @show hessian(pl)
 
     r = rp(pl, theta, i)
     # println("\n\n\nCalling qb:")
@@ -261,6 +269,7 @@ function qb(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) where {N,T}
     # @show theta
 
     # @show abs2.(pl.map.std_estimates)
+    # @show inv(hessian(pl))
     # @show inv(hessian(pl))
     # @show pl.subhess
 
@@ -291,20 +300,39 @@ function qb(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) where {N,T}
     (prof_factor - grad[N]) * rootdet * pl.map.base_adjust[]
 end
 
+# function set_buffer_to_profile!(pl::ProfileLikelihood{N}, i = profile_ind(pl)) where N
+#     @inbounds begin
+#         for j in 1:i-1
+#             pl.map.buffer[j] = pl.nuisance[j]
+#         end
+#         pl.map.buffer[i] = profile_val(pl)
+#         for j in i+1:N
+#             pl.map.buffer[j] = pl.nuisance[j-1]
+#         end
+#     end
+# end
 function set_buffer_to_profile!(pl::ProfileLikelihood{N}, i = profile_ind(pl)) where N
-    @inbounds begin
+    @inbounds begin # turn these off while testing...or start with inbounds=no
         for j in 1:i-1
             pl.map.buffer[j] = pl.nuisance[j]
         end
-        pl.map.buffer[i] = profile_val(pl)
-        for j in i+1:N
-            pl.map.buffer[j] = pl.nuisance[j-1]
+        pl.map.buffer[i] = pl.nuisance[N-1]
+        if i != N
+            for j in i+1:N-1
+                pl.map.buffer[j] = pl.nuisance[j-1]
+            end
+            pl.map.buffer[N] = profile_val(pl)
         end
     end
 end
 
 Φ⁻¹(x) = √2*erfinv(2x-1)
-function Base.quantile(ap::AsymptoticPosterior, alpha, i = profile_ind(ap.pl))
+function Base.quantile(ap::AsymptoticPosterior, alpha, i)
+    ap.pl.od.config.f.i[] = i
     ap.pl.rstar[] = Φ⁻¹(alpha)
     linear_search(ap, i)
+end
+function Base.quantile(ap::AsymptoticPosterior, alpha)
+    ap.pl.rstar[] = Φ⁻¹(alpha)
+    linear_search(ap, profile_ind(ap.pl))
 end
