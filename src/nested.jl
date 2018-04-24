@@ -331,11 +331,11 @@ end
 function Base.quantile(ap::AsymptoticPosterior, alpha, i)
     ap.pl.od.config.f.i[] = i
     ap.pl.rstar[] = Φ⁻¹(alpha)
-    linear_search(ap, i)
+    quadratic_search(ap, i)
 end
 function Base.quantile(ap::AsymptoticPosterior, alpha)
     ap.pl.rstar[] = Φ⁻¹(alpha)
-    linear_search(ap, profile_ind(ap.pl))
+    quadratic_search(ap, profile_ind(ap.pl))
 end
 
 
