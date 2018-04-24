@@ -227,7 +227,7 @@ function pdf(pl::ProfileLikelihood, x, i)
 end
 
 function (pl::ProfileLikelihood)(theta, i = profile_ind(pl))
-    @show theta
+    # @show theta
     rstar_p(pl, theta, i) + pl.rstar[]
 end
 
