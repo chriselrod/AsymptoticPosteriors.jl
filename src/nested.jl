@@ -227,6 +227,7 @@ function pdf(pl::ProfileLikelihood, x, i)
 end
 
 function (pl::ProfileLikelihood)(theta, i = profile_ind(pl))
+    @show theta
     rstar_p(pl, theta, i) + pl.rstar[]
 end
 
@@ -335,4 +336,26 @@ end
 function Base.quantile(ap::AsymptoticPosterior, alpha)
     ap.pl.rstar[] = Φ⁻¹(alpha)
     linear_search(ap, profile_ind(ap.pl))
+end
+
+
+export lquantile, qquantile
+function lquantile(ap::AsymptoticPosterior, alpha, i)
+    ap.pl.od.config.f.i[] = i
+    ap.pl.rstar[] = Φ⁻¹(alpha)
+    linear_search(ap, i)
+end
+function lquantile(ap::AsymptoticPosterior, alpha)
+    ap.pl.rstar[] = Φ⁻¹(alpha)
+    linear_search(ap, profile_ind(ap.pl))
+end
+
+function qquantile(ap::AsymptoticPosterior, alpha, i)
+    ap.pl.od.config.f.i[] = i
+    ap.pl.rstar[] = Φ⁻¹(alpha)
+    quadratic_search(ap, i)
+end
+function qquantile(ap::AsymptoticPosterior, alpha)
+    ap.pl.rstar[] = Φ⁻¹(alpha)
+    quadratic_search(ap, profile_ind(ap.pl))
 end

@@ -26,6 +26,7 @@ function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
     fx1, fx0 = ap.pl(x1, i), fx1
 
     not_converged = no_convergence(x0, x1, fx1, ap.options)
+    # @show not_converged
 
     # Keep using quadratic approximations until either convergence or signs flip.
     while not_converged && signbit(fx0) == signbit(fx1)
@@ -34,10 +35,7 @@ function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
         not_converged = no_convergence(x0, x1, fx1, ap.options)
     end
     if not_converged # If signs flipped, switch to FalsePosition
-        ap.state.xn1 = x1
-        ap.state.xn0 = x0
-        ap.state.fxn1 = fx1
-        ap.state.fxn0 = fx0
+        reset_state!(ap.state, x1, x0, fx1, fx0)
         find_zero!(ap.state, ap.pl, FalsePosition(), ap.options)
         x1 = ap.state.xn1
         # fx1 = ap.state.fx1
@@ -48,14 +46,14 @@ end
 
 function update(x0, x1, x2, fx0, fx1, fx2)
 
-    δx01 = (x0 - x1)
-    δx02 = (x0 - x2)
-    δx12 = (x1 - x2)
+    # δx01 = (x0 - x1)
+    # δx02 = (x0 - x2)
+    # δx12 = (x1 - x2)
     # denom = δx01*δx02*δx12
 
-    δx01 *= fx2 * khjg
-    δx02 *= fx1
-    δx12 *= fx0
+    δx01 = fx2 * (x0 - x1)
+    δx02 = fx1 * (x0 - x2)
+    δx12 = fx0 * (x1 - x2)
 
     a = (δx12         - δx02         + δx01)#/denom
     b = (δx12*(x1+x2) - δx02*(x0+x2) + δx01*(x0+x1))/2#/denom
@@ -83,16 +81,24 @@ function quadratic_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
         return x1#, fx1
     end
 
+    # s = -s
     δf = fx1 - fx0
     δx = x1 - x0
-    abs2x1mx0 = abs2(δx)
-    sδxmδf = s*δx - δf
-    discriminant = (4fx0*sδxmδf + abs2x1mx0*abs2(s))*abs2x1mx0
-    if discriminant > 0 #There are two solutions, now we need to pick which one we use.
-        x2 = ( (2x0*δf - s*abs2(x1) + s*abs2(x0)) + copysign(sqrt(discriminant), fx0) ) / 2sδxmδf
-    else #If there are no solutions to the quadratic problem, we will take a linear step.
+    # sδx = δx*s
+    # a = δf + sδx
+    # b = (abs2(x1) - abs2(x0))*s + 2x0*δf
+    # c = fx1*abs2(x0) + fx0*abs2(x1) - x0*x1*(2fx0 - sδx)
+    # # @show (a,b,c)
+    # # println("$x0 $c $b $a")
+    # # println("$x1 $c $b $a")
+    # # @show (x0, x1, fx0, fx1, s)
+
+    # discriminant = abs2(b) -4a*c
+    # if discriminant > 0
+    #     x2 = (b-sqrt(discriminant)) / 2a
+    # else #If there are no solutions to the quadratic problem, we will take a linear step.
         x2 = x1 - fx1 * δx / δf
-    end
+    # end
     fx2 = ap.pl(x2, i)
     not_converged = no_convergence(x1, x2, fx2, ap.options)
 
@@ -103,10 +109,7 @@ function quadratic_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
         not_converged = no_convergence(x1, x2, fx2, ap.options)
     end
     if not_converged # If signs flipped, switch to FalsePosition
-        ap.state.xn1 = x2
-        ap.state.xn0 = x1
-        ap.state.fxn1 = fx2
-        ap.state.fxn0 = fx1
+        reset_state!(ap.state, x2, x1, fx2, fx1)
         find_zero!(ap.state, ap.pl, FalsePosition(), ap.options)
         x2 = ap.state.xn1
         # fx2 = ap.state.fx1

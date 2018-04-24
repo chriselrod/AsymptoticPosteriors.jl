@@ -136,8 +136,6 @@ function find_zero!(state::UnivariateZeroState, fs::F, method::UnivariateZeroMet
         
         val = assess_convergence(state, options)
 
-
-
         if val
             if state.stopped && !(state.x_converged || state.f_converged)
                 ## stopped is a heuristic, there was an issue with an approximate derivative
@@ -303,5 +301,10 @@ end
 
 @inline convergenceλ(x, options) = max(options.abstol, max(one(real(x)), norm(x)) * options.reltol) 
 @inline check_approx(x, y, rtol, atol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+# function check_approx(x, y, rtol, atol)
+#     @show norm(x-y)
+#     @show atol + rtol*max(norm(x), norm(y))
+#     norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+# end
 
 
