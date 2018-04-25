@@ -6,9 +6,10 @@ end #on ifelse: isn't there going to be a branch anyway when the calling program
 
 @inline function initial_conditions(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
     fx0 = ap.pl.rstar[]
-    x0 = ap.pl.map.θhat[i]
-    s = ap.pl.map.std_estimates[i] # inverse slope
-
+    @inbounds begin
+        x0 = ap.pl.map.θhat[i]
+        s = ap.pl.map.std_estimates[i] # inverse slope
+    end
     x1 = x0 + fx0 * s
     fx1 = ap.pl(x1, i)
 
@@ -54,21 +55,35 @@ function update(x0, x1, x2, fx0, fx1, fx2)
     δx01 = fx2 * (x0 - x1)
     δx02 = fx1 * (x0 - x2)
     δx12 = fx0 * (x1 - x2)
-
     a = (δx12         - δx02         + δx01)#/denom
-    b = (δx12*(x1+x2) - δx02*(x0+x2) + δx01*(x0+x1))/2#/denom
+    b = (δx12*(x1+x2) - δx02*(x0+x2) + δx01*(x0+x1))/2a#/denom
     c = (δx12*x1*x2   - δx02*x0*x2   + δx01*x0*x1)#/denom
 
 
-    discriminant = abs2(b) - a*c
+    discriminant = abs2(b) - c/a
     if discriminant > 0 # Would projecting whether the upper or lower root is correct be faster?
         root_discrim = sqrt(discriminant)
-        r_u = (b + root_discrim)/a
-        r_l = (b - root_discrim)/a
+        r_u = b + root_discrim
+        r_l = b - root_discrim
         x0 = ifelse(norm(r_u - x2) < norm(r_l-x2), r_u, r_l)
     else
         x0 = x2 + fx2 * δx12 / (fx2-fx1)
     end
+
+    # a = (δx12         - δx02         + δx01)#/denom
+    # b = (δx12*(x1+x2) - δx02*(x0+x2) + δx01*(x0+x1))/2#/denom
+    # c = (δx12*x1*x2   - δx02*x0*x2   + δx01*x0*x1)#/denom
+
+
+    # discriminant = abs2(b) - c*a
+    # if discriminant > 0 # Would projecting whether the upper or lower root is correct be faster?
+    #     root_discrim = sqrt(discriminant)
+    #     r_u = (b + root_discrim) / a
+    #     r_l = (b - root_discrim) / a
+    #     x0 = ifelse(norm(r_u - x2) < norm(r_l-x2), r_u, r_l)
+    # else
+    #     x0 = x2 + fx2 * δx12 / (fx2-fx1)
+    # end
 
     x1, x2, x0
 end

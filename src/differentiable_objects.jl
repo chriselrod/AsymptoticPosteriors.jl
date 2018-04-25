@@ -33,8 +33,6 @@ struct GDifferentiable{N,T,A<:AbstractArray{T},C<:GradientConfiguration} <: Forw
     config::C
 end
 
-Optim.iscomplex(::ForwardDiffDifferentiable) = false
-
 # struct ProfileDifferentiable{N,T,A<:AbstractArray{T},C} <: ForwardDiffDifferentiable
 #     x_f::Vector{T} # x used to evaluate f (stored in F)
 #     x_df::Vector{T} # x used to evaluate df (stored in DF)
@@ -81,24 +79,32 @@ end
 # end
 
 
-DiffResults.value!(obj::ForwardDiffDifferentiable, x::Real) = DiffResults.value!(obj.config.result, x)
+@inline DiffResults.value!(obj::ForwardDiffDifferentiable, x::Real) = DiffResults.value!(obj.config.result, x)
 
-NLSolversBase.value(obj::ForwardDiffDifferentiable) = DiffResults.value(obj.config.result)
-NLSolversBase.gradient(obj::ForwardDiffDifferentiable) = DiffResults.gradient(obj.config.result)
-NLSolversBase.gradient(obj::ForwardDiffDifferentiable, i::Integer) = DiffResults.gradient(obj.config.result)[i]
-NLSolversBase.hessian(obj::ForwardDiffDifferentiable) = DiffResults.hessian(obj.config.result)
-
-
-f(obj::ForwardDiffDifferentiable, x) = obj.config.f(x)
-# function f(obj::ProfileDifferentiable, x)
+@inline NLSolversBase.value(obj::ForwardDiffDifferentiable) = DiffResults.value(obj.config.result)
+@inline NLSolversBase.gradient(obj::ForwardDiffDifferentiable) = DiffResults.gradient(obj.config.result)
+@inline NLSolversBase.gradient(obj::ForwardDiffDifferentiable, i::Integer) = DiffResults.gradient(obj.config.result)[i]
+@inline NLSolversBase.hessian(obj::ForwardDiffDifferentiable) = DiffResults.hessian(obj.config.result)
 
 
-# end
+@inline f(obj::ForwardDiffDifferentiable, x) = obj.config.f(x)
 
-function df(obj::ForwardDiffDifferentiable, x)
+"""
+For DynamicHMC support. Copies data.
+"""
+function (obj::GDifferentiable)(x)
+    fdf(obj, x)
+    DiffResults.ImmutableDiffResult(obj.config.result.value, (copy(obj.config.derivs[1]),))
+end
+function (obj::LeanDifferentiable)(x)
+    fdf(obj, x)
+    DiffResults.ImmutableDiffResult(obj.config.result.value, (copy(obj.config.derivs[1]),))
+end
+
+@inline function df(obj::ForwardDiffDifferentiable, x)
     ForwardDiff.gradient!(NLSolversBase.gradient(obj), obj.config.f, x, obj.config.gconfig, Val{false}())
 end
-function fdf(obj::ForwardDiffDifferentiable, x)
+@inline function fdf(obj::ForwardDiffDifferentiable, x)
     obj.config.result.derivs = (NLSolversBase.gradient(obj), NLSolversBase.hessian(obj))
     ForwardDiff.gradient!(obj.config.result, obj.config.f, x, obj.config.gconfig, Val{false}())
     DiffResults.value(obj.config.result)
@@ -308,6 +314,9 @@ function optimize_light(d::D, initial_x::Tx, method::M,
         !converged && Optim.update_h!(d, state, method) # only relevant if not converged
     end # while
 
-    f_incr_pick = f_increased && !options.allow_f_increases
+    f_incr_pick = disallow_f_increases(options) && f_increased
     return Optim.pick_best_x(f_incr_pick, state), Optim.pick_best_f(f_incr_pick, state, d)
 end
+
+disallow_f_increases(options) = false
+disallow_f_increases(options::Optim.Options) = options.allow_f_increases
