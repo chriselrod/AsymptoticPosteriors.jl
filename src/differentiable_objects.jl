@@ -4,16 +4,16 @@
 @generated ValP1(::Val{N}) where N = Val{N+1}()
 @generated ValM1(::Val{N}) where N = Val{N-1}()
 
-abstract type ForwardDiffDifferentiable <: NLSolversBase.AbstractObjective end
-abstract type Configuration end
+abstract type AutoDiffDifferentiable{N,T,F} <: NLSolversBase.AbstractObjective end
+abstract type Configuration{V,F} end
 
-struct GradientConfiguration{T,V,ND,DG,F} <: Configuration
+struct GradientConfiguration{V,F,T,ND,DG} <: Configuration{V,F}
     f::F
     result::DiffResults.MutableDiffResult{2,V,Tuple{Vector{V},Matrix{V}}}
     gconfig::ForwardDiff.GradientConfig{T,V,ND,DG}
 end
 
-struct HessianConfiguration{T,T2,V,ND,DJ,DG,DG2,F} <: Configuration
+struct HessianConfiguration{V,F,T,T2,ND,DJ,DG,DG2} <: Configuration{V,F}
     f::F
     result::DiffResults.MutableDiffResult{2,V,Tuple{Vector{V},Matrix{V}}}
     inner_result::DiffResults.MutableDiffResult{1,ForwardDiff.Dual{T,V,ND},Tuple{Vector{ForwardDiff.Dual{T,V,ND}}}}
@@ -21,19 +21,19 @@ struct HessianConfiguration{T,T2,V,ND,DJ,DG,DG2,F} <: Configuration
     gradient_config::ForwardDiff.GradientConfig{T,ForwardDiff.Dual{T,V,ND},ND,DG}
     gconfig::ForwardDiff.GradientConfig{T2,V,ND,DG2}
 end
-struct LeanDifferentiable{N,T,A<:AbstractArray{T},C<:Configuration} <: ForwardDiffDifferentiable
+struct LeanDifferentiable{N,T,F,A<:AbstractArray{T},C<:Configuration{T,F}} <: AutoDiffDifferentiable{N,T,F}
     x_f::A # x used to evaluate f (stored in F)
     x_df::A # x used to evaluate df (stored in DF)
     x_h::A #??
     config::C
 end
-struct GDifferentiable{N,T,A<:AbstractArray{T},C<:GradientConfiguration} <: ForwardDiffDifferentiable
+struct GDifferentiable{N,T,F,A<:AbstractArray{T},C<:GradientConfiguration{T,F}} <: AutoDiffDifferentiable{N,T,F}
     x_f::A # x used to evaluate f (stored in F)
     x_df::A # x used to evaluate df (stored in DF)
     config::C
 end
 
-# struct ProfileDifferentiable{N,T,A<:AbstractArray{T},C} <: ForwardDiffDifferentiable
+# struct ProfileDifferentiable{N,T,A<:AbstractArray{T},C} <: AutoDiffDifferentiable
 #     x_f::Vector{T} # x used to evaluate f (stored in F)
 #     x_df::Vector{T} # x used to evaluate df (stored in DF)
 #     x_h::Vector{T} #??
@@ -62,11 +62,11 @@ LeanDifferentiable(f::F, ::Val{N}) where {F,N} = LeanDifferentiable(f, Vector{Fl
 function LeanDifferentiable(f::F, x::AbstractArray{T}, ::Val{N}) where {F,T,N}
     LeanDifferentiable(x, similar(x), similar(x), Configuration(f, x, Val{N}()), Val{N}())
 end
-function LeanDifferentiable(x_f::A,x_df::A,x_h::A,config::C,::Val{N}) where {T,A<:AbstractArray{T},C,N}
-    LeanDifferentiable{N,T,A,C}(x_f, x_df, x_h, config)
+function LeanDifferentiable(x_f::A,x_df::A,x_h::A,config::C,::Val{N}) where {T,A<:AbstractArray{T},F,C<:Configuration{T,F},N}
+    LeanDifferentiable{N,T,F,A,C}(x_f, x_df, x_h, config)
 end
-function GDifferentiable(x_f::A,x_df::A,config::C,::Val{N}) where {T,A<:AbstractArray{T},C,N}
-    GDifferentiable{N,T,A,C}(x_f, x_df, config)
+function GDifferentiable(x_f::A,x_df::A,config::C,::Val{N}) where {T,A<:AbstractArray{T},F,C<:GradientConfiguration{T,F},N}
+    GDifferentiable{N,T,F,A,C}(x_f, x_df, config)
 end
 
 # ProfileDifferentiable(f::F, ::Val{N}) where {F,N} = ProfileDifferentiable(f, Vector{Float64}(undef, N), Val{N}())
@@ -79,15 +79,15 @@ end
 # end
 
 
-@inline DiffResults.value!(obj::ForwardDiffDifferentiable, x::Real) = DiffResults.value!(obj.config.result, x)
+@inline DiffResults.value!(obj::AutoDiffDifferentiable, x::Real) = DiffResults.value!(obj.config.result, x)
 
-@inline NLSolversBase.value(obj::ForwardDiffDifferentiable) = DiffResults.value(obj.config.result)
-@inline NLSolversBase.gradient(obj::ForwardDiffDifferentiable) = DiffResults.gradient(obj.config.result)
-@inline NLSolversBase.gradient(obj::ForwardDiffDifferentiable, i::Integer) = DiffResults.gradient(obj.config.result)[i]
-@inline NLSolversBase.hessian(obj::ForwardDiffDifferentiable) = DiffResults.hessian(obj.config.result)
+@inline NLSolversBase.value(obj::AutoDiffDifferentiable) = DiffResults.value(obj.config.result)
+@inline NLSolversBase.gradient(obj::AutoDiffDifferentiable) = DiffResults.gradient(obj.config.result)
+@inline NLSolversBase.gradient(obj::AutoDiffDifferentiable, i::Integer) = DiffResults.gradient(obj.config.result)[i]
+@inline NLSolversBase.hessian(obj::AutoDiffDifferentiable) = DiffResults.hessian(obj.config.result)
 
 
-@inline f(obj::ForwardDiffDifferentiable, x) = obj.config.f(x)
+@inline f(obj::AutoDiffDifferentiable, x) = obj.config.f(x)
 
 """
 For DynamicHMC support. Copies data.
@@ -101,10 +101,10 @@ function (obj::LeanDifferentiable)(x)
     DiffResults.ImmutableDiffResult(obj.config.result.value, (copy(obj.config.derivs[1]),))
 end
 
-@inline function df(obj::ForwardDiffDifferentiable, x)
+@inline function df(obj::AutoDiffDifferentiable, x)
     ForwardDiff.gradient!(NLSolversBase.gradient(obj), obj.config.f, x, obj.config.gconfig, Val{false}())
 end
-@inline function fdf(obj::ForwardDiffDifferentiable, x)
+@inline function fdf(obj::AutoDiffDifferentiable, x)
     obj.config.result.derivs = (NLSolversBase.gradient(obj), NLSolversBase.hessian(obj))
     ForwardDiff.gradient!(obj.config.result, obj.config.f, x, obj.config.gconfig, Val{false}())
     DiffResults.value(obj.config.result)
@@ -135,7 +135,7 @@ Force (re-)evaluation of the objective value at `x`.
 
 Returns `f(x)` and stores the value in `obj.F`
 """
-function NLSolversBase.value!!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.value!!(obj::AutoDiffDifferentiable, x)
     # obj.f_calls .+= 1
     copyto!(obj.x_f, x)
     DiffResults.value!(obj, f(obj, x) )
@@ -145,7 +145,7 @@ Evaluates the objective value at `x`.
 
 Returns `f(x)`, but does *not* store the value in `obj.F`
 """
-function NLSolversBase.value(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.value(obj::AutoDiffDifferentiable, x)
     if x != obj.x_f
         # obj.f_calls .+= 1
         NLSolversBase.value!!(obj, x)
@@ -157,7 +157,7 @@ Evaluates the objective value at `x`.
 
 Returns `f(x)` and stores the value in `obj.F`
 """
-function NLSolversBase.value!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.value!(obj::AutoDiffDifferentiable, x)
     if x != obj.x_f
         NLSolversBase.value!!(obj, x)
     end
@@ -169,7 +169,7 @@ Evaluates the gradient value at `x`
 
 This does *not* update `obj.DF`.
 """
-function NLSolversBase.gradient(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.gradient(obj::AutoDiffDifferentiable, x)
     DF = NLSolversBase.gradient(obj)
     if x != obj.x_df
         tmp = copy(DF)
@@ -186,7 +186,7 @@ Evaluates the gradient value at `x`.
 
 Stores the value in `obj.DF`.
 """
-function NLSolversBase.gradient!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.gradient!(obj::AutoDiffDifferentiable, x)
     if x != obj.x_df
         NLSolversBase.gradient!!(obj, x)
     end
@@ -197,13 +197,13 @@ Force (re-)evaluation of the gradient value at `x`.
 
 Stores the value in `obj.DF`.
 """
-function NLSolversBase.gradient!!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.gradient!!(obj::AutoDiffDifferentiable, x)
     # obj.df_calls .+= 1
     copyto!(obj.x_df, x)
     df(obj, x)
 end
 
-function NLSolversBase.value_gradient!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.value_gradient!(obj::AutoDiffDifferentiable, x)
     if x != obj.x_f && x != obj.x_df
         NLSolversBase.value_gradient!!(obj, x)
     elseif x != obj.x_f
@@ -213,7 +213,7 @@ function NLSolversBase.value_gradient!(obj::ForwardDiffDifferentiable, x)
     end
     NLSolversBase.value(obj)
 end
-function NLSolversBase.value_gradient!!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.value_gradient!!(obj::AutoDiffDifferentiable, x)
     # obj.f_calls .+= 1
     # obj.df_calls .+= 1
     copyto!(obj.x_f, x)
@@ -221,12 +221,12 @@ function NLSolversBase.value_gradient!!(obj::ForwardDiffDifferentiable, x)
     DiffResults.value!(obj, fdf(obj, x))
 end
 
-function NLSolversBase.hessian!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.hessian!(obj::AutoDiffDifferentiable, x)
     if x != obj.x_h
         hessian!!(obj, x)
     end
 end
-function NLSolversBase.hessian!!(obj::ForwardDiffDifferentiable, x)
+function NLSolversBase.hessian!!(obj::AutoDiffDifferentiable, x)
     # obj.h_calls .+= 1
     copyto!(obj.x_h, x)
     hessian!(obj.config, x)

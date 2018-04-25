@@ -3,7 +3,7 @@
 """Here, we take a much more straightforward approach to the implementation of Reid."""
 
 
-struct MAP{N,T,D,M,O,S}
+struct MAP{N,T,F,D<:AutoDiffDifferentiable{N,T,F},M,O,S}
     od::D
     method::M
     options::O
@@ -16,7 +16,7 @@ struct MAP{N,T,D,M,O,S}
     cov::Matrix{T}
 end
 
-struct ProfileLikelihood{N,T,D,M,S,MAP_ <: MAP{N,T},A<:AbstractArray{T}}
+struct ProfileLikelihood{N,T,F,D<:AutoDiffDifferentiable{N,T,<:ProfileWrapper{N,F}},M,S,MAP_ <: MAP{N,T},A<:AbstractArray{T}}
     od::D
     method::M
     state::S
@@ -30,14 +30,14 @@ set!(pl::ProfileLikelihood, v, i) = set!(pl.od.config.f, v, i)
 setswap!(map_::MAP, i) = map_.od.config.f.i[] = i
 setswap!(pl::ProfileLikelihood, i) = pl.map.od.config.f.i[] = i
 
-struct AsymptoticPosterior{N,T,PL <: ProfileLikelihood{N,T}}
+struct AsymptoticPosterior{N,T,F,PL <: ProfileLikelihood{N,T,F}}
     pl::PL
     state::UnivariateZeroStateBase{T,T,String}
     options::UnivariateZeroOptions{T}
 end
 
-function AsymptoticPosterior(pl::PL,state::UnivariateZeroStateBase{T,T,String},options::UnivariateZeroOptions{T}) where {N,T,PL <: ProfileLikelihood{N,T}}
-    AsymptoticPosterior{N,T,PL}(pl,state,options)
+function AsymptoticPosterior(pl::PL,state::UnivariateZeroStateBase{T,T,String},options::UnivariateZeroOptions{T}) where {N,T,F,PL <: ProfileLikelihood{N,T,F}}
+    AsymptoticPosterior{N,T,F,PL}(pl,state,options)
 end
 
 MAP(f, ::Val{N}) where N = MAP(f, Vector{Float64}(undef, N+1), Val{N}())
@@ -74,8 +74,8 @@ function MAP(f::F, initial_x::AbstractArray{T}, ::Val{N}) where {F,T,N}
 
     fit!(map_, initial_x)
 end
-function MAP(od::D, method::M, options::O, state::S, θhat::Vector{T}, buffer::Vector{T}, nlmax::Base.RefValue{T}, base_adjust::Base.RefValue{T}, std_estimates::Vector{T}, cov_mat::Matrix{T}, ::Val{N}) where {D,M,O,S,T,N}
-    MAP{N,T,D,M,O,S}(od, method, options, state, θhat, buffer, nlmax, base_adjust, std_estimates, cov_mat)
+function MAP(od::D, method::M, options::O, state::S, θhat::Vector{T}, buffer::Vector{T}, nlmax::Base.RefValue{T}, base_adjust::Base.RefValue{T}, std_estimates::Vector{T}, cov_mat::Matrix{T}, ::Val{N}) where {N,T,F,D<:AutoDiffDifferentiable{N,T,F},M,O,S}
+    MAP{N,T,F,D,M,O,S}(od, method, options, state, θhat, buffer, nlmax, base_adjust, std_estimates, cov_mat)
 end
 
 
@@ -151,8 +151,8 @@ function ProfileLikelihood(f::F, map_::MAP, initial_x::A, ::Val{N}) where {F,T,A
 
     # fit!(map_, initial_x)
 end
-function ProfileLikelihood(od::D, method::M, state::S, map_::MAP_, nuisance::A, ::Val{N}) where {N,D,M,S,T,MAP_ <: MAP{N,T},A<:AbstractArray{T}}
-    ProfileLikelihood{N,T,D,M,S,MAP_,A}(od, method, state, map_, nuisance, Ref{T}(), Ref{Float64}(), @view(hessian(map_)[1:N-1,1:N-1]))
+function ProfileLikelihood(od::D, method::M, state::S, map_::MAP_, nuisance::A, ::Val{N}) where {N,T,F,D<:AutoDiffDifferentiable{N,T,<:ProfileWrapper{N,F}},M,S,MAP_ <: MAP{N,T},A<:AbstractArray{T}}
+    ProfileLikelihood{N,T,F,D,M,S,MAP_,A}(od, method, state, map_, nuisance, Ref{T}(), Ref{Float64}(), @view(hessian(map_)[1:N-1,1:N-1]))
 end
 
 #Convenience function does a dynamic dispatch.
@@ -227,7 +227,8 @@ function pdf(pl::ProfileLikelihood, x, i)
 end
 
 function (pl::ProfileLikelihood)(theta, i = profile_ind(pl))
-    # @show theta
+    # @show theta, pl.rstar[]
+    # @assert isnan(theta) == false
     rstar_p(pl, theta, i) + pl.rstar[]
 end
 
@@ -331,11 +332,13 @@ end
 function Base.quantile(ap::AsymptoticPosterior, alpha, i)
     ap.pl.od.config.f.i[] = i
     ap.pl.rstar[] = Φ⁻¹(alpha)
-    quadratic_search(ap, i)
+    # quadratic_search(ap, i)
+    linear_search(ap, profile_ind(ap.pl))
 end
 function Base.quantile(ap::AsymptoticPosterior, alpha)
     ap.pl.rstar[] = Φ⁻¹(alpha)
-    quadratic_search(ap, profile_ind(ap.pl))
+    linear_search(ap, profile_ind(ap.pl))
+    # quadratic_search(ap, profile_ind(ap.pl))
 end
 
 
