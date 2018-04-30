@@ -143,8 +143,8 @@ function find_zero!(state::UnivariateZeroState, fs::F, method::UnivariateZeroMet
                 ## (Is this a good idea?)
                 xstar, fxstar = state.xn1, state.fxn1
                 if abs(fxstar) <= (options.abstol)^(2/3)
-                    msg = "Algorithm stopped early, but |f(xn)| < ϵ^(2/3), where ϵ = abstol"
-                    state.message = state.message == "" ? msg : state.message * "\n\t" * msg
+                    # msg = "Algorithm stopped early, but |f(xn)| < ϵ^(2/3), where ϵ = abstol"
+                    # state.message = state.message == "" ? msg : state.message * "\n\t" * msg
                     state.f_converged = true
                 else
                     state.convergence_failed = true
@@ -252,30 +252,38 @@ function assess_convergence(state, options)
 
     if state.steps > options.maxevals
         state.stopped = true
-        state.message = "too many steps taken."
+        println("too many steps taken.")
+        @show xn0, fxn0, xn1, fxn1
+        # state.message = "too many steps taken."
         return true
     end
 
     if state.fnevals > options.maxfnevals
         state.stopped = true
-        state.message = "too many function evaluations taken."
+        println("too many function evaluations taken.")
+        @show xn0, fxn0, xn1, fxn1
+        # state.message = "too many function evaluations taken."
         return true
     end
 
     if isnan(xn1)
         state.convergence_failed = true
-        state.message = "NaN produced by algorithm"
+        println("NaN produced by algorithm")
+        @show xn0, fxn0, xn1, fxn1
+        # state.message = "NaN produced by algorithm"
         return true
     end
     
     if isinf(fxn1)
         state.convergence_failed = true
-        state.message = "Inf produced by algorithm"
+        println("Inf produced by algorithm")
+        @show xn0, fxn0, xn1, fxn1
+        # state.message = "Inf produced by algorithm"
         return true
     end
 
     λ = convergenceλ(xn1, options)
-    
+    # @show (norm(fxn0),norm(fxn1),λ)
     #is fxn1 close enough to 0?
     if  norm(fxn1) <= λ
         state.f_converged = true

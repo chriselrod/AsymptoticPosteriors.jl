@@ -48,20 +48,20 @@ function set_identity(invH::AbstractMatrix{T}, x::AbstractArray{T}) where T
         for j in 1:i-1
             invH[j,i] = zero(T)
         end
-        invH[i,i] = one(T)
+        invH[i,i] = one(T)/10^2
         for j in i+1:length(x)
             invH[j,i] = zero(T)
         end
     end            
 end
 
-function MAP(f::F, initial_x::AbstractArray{T}, ::Val{N}) where {F,T,N}
+function MAP(f, initial_x::AbstractArray{T}, ::Val{N}) where {T,N}
 
-    swap = Swap{N,F}(f, Ref(N))
     # od = OnceDifferentiable(config.swap.f, df, fdf, initial_x, zero(T), Val{true}())
-    od = LeanDifferentiable(swap, Val{N}())
+    od = LeanDifferentiable(Swap(f, Val{N}()), Val{N}())
     # Optim.LBFGS(linesearch=LineSearches.BackTracking())
 
+    # backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.HagerZhang(), set_identity, Optim.Flat())
     backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.BackTracking(), set_identity, Optim.Flat())
     # backtrack = Optim.LBFGS(10, LineSearches.InitialStatic(), LineSearches.BackTracking(), nothing, (P, x) -> nothing, Optim.Flat(), true)
 
@@ -140,6 +140,7 @@ function ProfileLikelihood(f::F, map_::MAP, initial_x::A, ::Val{N}) where {F,T,A
     od = ProfileDifferentiable(f, nuisance, Val{N}())
     # Optim.LBFGS(linesearch=LineSearches.BackTracking())
 
+    # backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.HagerZhang(), set_profile_cov, Optim.Flat())
     backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.BackTracking(), set_profile_cov, Optim.Flat())
     # backtrack = LBFGS(10, LineSearches.InitialStatic(), LineSearches.BackTracking(), nothing, (P, x) -> nothing, Optim.Flat(), true)
 
@@ -172,7 +173,13 @@ end
 profile_ind(pl::ProfileLikelihood) = pl.od.config.f.i[]
 profile_val(pl::ProfileLikelihood) = pl.od.config.f.v[]
 
-function expected_nuisance!(pl::ProfileLikelihood{N}, x, i::Int = profile_ind(pl)) where N
+
+"""
+Calculates what the profile expected value would be, given normality.
+That is
+pl.nuisance = pl.map.θhat_2 + Cov_{2,1}*Cov_{1,1}^{-1}*(x - pl.map.θhat_1)
+"""
+function normal_expected_nuisance!(pl::ProfileLikelihood{N}, x, i::Int = profile_ind(pl)) where N
     @inbounds begin
         sf = (x - pl.map.θhat[i]) / pl.map.cov[i,i]
         for j in 1:i-1
@@ -185,23 +192,41 @@ function expected_nuisance!(pl::ProfileLikelihood{N}, x, i::Int = profile_ind(pl
     nothing
 end
 
+"""
+Naively assumes indepedence, and just uses the global maximum for the profile maximum.
+This seems like it ought to perform poorly, but in tests it appears more robust.
+"""
+function naive_expected_nuisance!(pl::ProfileLikelihood{N}, x, i::Int = profile_ind(pl)) where N
+    @inbounds begin
+        # sf = (x - pl.map.θhat[i]) / pl.map.cov[i,i]
+        for j in 1:i-1
+            pl.nuisance[j] = pl.map.θhat[j]# + pl.map.cov[j,i] * sf
+        end
+        for j in i+1:N
+            pl.nuisance[j-1] = pl.map.θhat[j]# + pl.map.cov[j,i] * sf
+        end
+    end
+    nothing
+end
+
 function setinvH!(invH::AbstractMatrix{T}, cov::AbstractMatrix{T}, i::Int) where T
     n = size(cov,1)
+    divisor = 10
     @inbounds begin
         for j in 1:i-1
             for k in 1:i-1
-                invH[k,j] = cov[k,j]
+                invH[k,j] = cov[k,j]/divisor
             end
             for k in i+1:n
-                invH[k-1,j] = cov[k,j]
+                invH[k-1,j] = cov[k,j]/divisor
             end
         end
         for j in i+1:n
             for k in 1:i-1
-                invH[k,j-1] = cov[k,j]
+                invH[k,j-1] = cov[k,j]/divisor
             end
             for k in i+1:n
-                invH[k-1,j-1] = cov[k,j]
+                invH[k-1,j-1] = cov[k,j]/divisor
             end
         end
     end
@@ -209,7 +234,8 @@ end
 
 function pdf(pl::ProfileLikelihood, x)
     i = profile_ind(pl::ProfileLikelihood)
-    expected_nuisance!(pl, x, i)
+    # expected_nuisance!(pl, x, i)
+    naive_expected_nuisance!(pl, x, i)
     initial_state!(pl.state, pl.method, pl.od, pl.nuisance)
     setinvH!(pl.state.invH, pl.map.cov, i) # Approximate inverse hessian with hessian at maximum.
     θhat, nlmax = optimize_light(pl.od, pl.nuisance, pl.method, pl.map.options, pl.state)
@@ -218,7 +244,8 @@ function pdf(pl::ProfileLikelihood, x)
 end
 function pdf(pl::ProfileLikelihood, x, i)
     set!(pl, x, i)
-    expected_nuisance!(pl, x, i)
+    # expected_nuisance!(pl, x, i)
+    naive_expected_nuisance!(pl, x, i)
     initial_state!(pl.state, pl.method, pl.od, pl.nuisance)
     setinvH!(pl.state.invH, pl.map.cov, i) # Approximate inverse hessian with hessian at maximum.
     θhat, nlmax = optimize_light(pl.od, pl.nuisance, pl.method, pl.map.options, pl.state)
@@ -227,8 +254,10 @@ function pdf(pl::ProfileLikelihood, x, i)
 end
 
 function (pl::ProfileLikelihood)(theta, i = profile_ind(pl))
-    # @show theta, pl.rstar[]
+    debug() && println("")
+    debug() && @show theta, pl.rstar[], i
     # @assert isnan(theta) == false
+    debug() && @show rstar_p(pl, theta, i) + pl.rstar[]
     rstar_p(pl, theta, i) + pl.rstar[]
 end
 
@@ -251,6 +280,8 @@ function rstar_p(pl::ProfileLikelihood{N}, theta, i = profile_ind(pl)) where N
     setswap!(pl, i)
     hessian!(pl.map.od.config, pl.map.buffer)
     # @show hessian(pl)
+    debug() && @show pl.map.buffer
+    debug() && @show hessian(pl)
 
     r = rp(pl, theta, i)
     # println("\n\n\nCalling qb:")
@@ -263,6 +294,37 @@ function rstar_p(pl::ProfileLikelihood{N}, theta, i = profile_ind(pl)) where N
     r + log(qb(pl, theta, i)/r)/r
 end
 
+function fdf_adjrstar_p(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) where {N,T}
+
+    pdf(pl, theta, i)
+    set_buffer_to_profile!(pl, i)
+    setswap!(pl, i)
+    hessian!(pl.map.od.config, pl.map.buffer)
+    
+
+    delta_log_likelihood = pl.nlmax[]-pl.map.nlmax[]
+    r = copysign( sqrt(2delta_log_likelihood), pl.map.θhat[i] - theta)
+    
+    grad = gradient(pl)
+
+    rootdet = choldet!(pl.subhess, UpperTriangular, ValM1(Val{N}()))
+    LinearAlgebra.LAPACK.potri!('U', pl.subhess)
+
+    prof_factor = zero(T)
+    @inbounds for i in 1:N-1
+        hᵢₙ = hessian(pl)[i,end]
+        gᵢ = grad[i]
+        for j in 1:i-1
+            prof_factor += pl.subhess[j,i] * (grad[j]*hᵢₙ + gᵢ*hessian(pl)[j,end])
+        end
+        prof_factor += pl.subhess[i,i] * gᵢ * hᵢₙ
+    end
+    hess_adjust = rootdet * pl.map.base_adjust[]
+    q = (prof_factor - grad[N]) * hess_adjust
+
+    rstar = r + log(q/r)/r
+    rstar + pl.rstar[], exp(abs2(rstar)/2-delta_log_likelihood) / hess_adjust
+end
 
 function qb(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) where {N,T}
     grad = gradient(pl)

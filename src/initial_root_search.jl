@@ -8,12 +8,11 @@ end #on ifelse: isn't there going to be a branch anyway when the calling program
     fx0 = ap.pl.rstar[]
     @inbounds begin
         x0 = ap.pl.map.θhat[i]
-        s = ap.pl.map.std_estimates[i] # inverse slope
+        x1 = x0 + fx0 * ap.pl.map.std_estimates[i] # inverse slope
     end
-    x1 = x0 + fx0 * s
-    fx1 = ap.pl(x1, i)
+    fx1, s = fdf_adjrstar_p(ap.pl, x1, i)
 
-    x0, fx0, x1, fx1, inv(s)
+    x0, fx0, x1, fx1, s
 
 end
 
@@ -22,20 +21,36 @@ function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
     if norm(fx1) <= convergenceλ(x1, ap.options)
         return x1#, fx1
     end
+    
+    debug_rootsearch() && @show ((x0 - x1) / (fx1 - fx0), 1/s)
+    debug_rootsearch() && @show x1 + fx1 / s
+    debug_rootsearch() && @show x1 + fx1 * (x0 - x1) / (fx1 - fx0)
+    # x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
+    x1, x0 = x1 + fx1 / s, x1
+    debug_rootsearch() && @show x1
 
-    x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
-    fx1, fx0 = ap.pl(x1, i), fx1
+    debug_rootsearch() && @show ap.pl.rstar[]
+    fx0 = fx1
+    fx1, s = fdf_adjrstar_p(ap.pl, x1, i)
+    debug_rootsearch() && @show fx1, ap.pl(x1, i)
+    # fx1, fx0 = ap.pl(x1, i), fx1
 
     not_converged = no_convergence(x0, x1, fx1, ap.options)
     # @show not_converged
 
     # Keep using quadratic approximations until either convergence or signs flip.
     while not_converged && signbit(fx0) == signbit(fx1)
-        x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
-        fx1, fx0 = ap.pl(x1, i), fx1
+        # x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
+        x1, x0 = x1 + fx1 / s, x1
+        # fx1, fx0 = ap.pl(x1, i), fx1
+        fx0 = fx1
+        fx1, s = fdf_adjrstar_p(ap.pl, x1, i)
+        debug_rootsearch() && @show (fx1, fx0)
         not_converged = no_convergence(x0, x1, fx1, ap.options)
     end
     if not_converged # If signs flipped, switch to FalsePosition
+        debug_rootsearch() && @show (x0, fx0, ap.pl(x0, i))
+        debug_rootsearch() && @show (x1, fx1, ap.pl(x1, i))
         reset_state!(ap.state, x1, x0, fx1, fx0)
         find_zero!(ap.state, ap.pl, FalsePosition(), ap.options)
         x1 = ap.state.xn1

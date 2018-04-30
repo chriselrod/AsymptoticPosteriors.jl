@@ -223,8 +223,9 @@ end
 
 function NLSolversBase.hessian!(obj::AutoDiffDifferentiable, x)
     if x != obj.x_h
-        hessian!!(obj, x)
+        NLSolversBase.hessian!!(obj, x)
     end
+    nothing
 end
 function NLSolversBase.hessian!!(obj::AutoDiffDifferentiable, x)
     # obj.h_calls .+= 1
@@ -261,7 +262,7 @@ function initial_state!(state, method::Optim.BFGS, d, initial_x::AbstractArray{T
     Optim.project_tangent!(method.manifold, NLSolversBase.gradient(d), initial_x)
     copyto!(state.g_previous, NLSolversBase.gradient(d))
     method.initial_invH(state.invH, initial_x)
-    state.alpha = one(T)
+    state.alpha = one(T)#/2
     nothing
 end
 # function initial_state!(state, method::BFGS, d, initial_x::AbstractArray{T}) where T
@@ -306,14 +307,14 @@ function optimize_light(d::D, initial_x::Tx, method::M,
 
     while !converged && iteration < 200#options.iterations #uncomment if you add back iterations field to LightOptions
         iteration += 1
-
         Optim.update_state!(d, state, method) && break # it returns true if it's forced by something in update! to stop (eg dx_dg == 0.0 in BFGS, or linesearch errors)
         Optim.update_g!(d, state, method) # TODO: Should this be `update_fg!`?
         x_converged, f_converged,
         g_converged, converged, f_increased = Optim.assess_convergence(state, d, options)
         !converged && Optim.update_h!(d, state, method) # only relevant if not converged
+        debug() && @show state.f_x_previous, Optim.value(d)
     end # while
-
+    debug() && @show iteration, x_converged, f_converged, g_converged, converged
     f_incr_pick = disallow_f_increases(options) && f_increased
     return Optim.pick_best_x(f_incr_pick, state), Optim.pick_best_f(f_incr_pick, state, d)
 end

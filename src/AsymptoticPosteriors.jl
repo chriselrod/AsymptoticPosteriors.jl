@@ -15,6 +15,11 @@ const LinearAlgebra = Compat.LinearAlgebra
 
 export AsymptoticPosterior
 
+# debug() = true
+debug() = false
+debug_rootsearch() = false
+# debug_rootsearch() = true
+
 include("function_wrappers.jl")
 include("differentiable_objects.jl")
 include("false_position.jl")
