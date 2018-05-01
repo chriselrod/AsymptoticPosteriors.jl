@@ -6,11 +6,42 @@ using Base.Test
 
 
 
+
+include("/home/chris/Documents/progwork/julia/NGSCov.jl")
+include("/home/chris/Documents/progwork/julia/NGStan.jl")
+@time ap = AsymptoticPosterior(n_big_4, init8, Val(8));
+@time apc = AsymptoticPosterior(n_big_4c, initCorr10, Val(10));
+summary(ap)
+summary(apc)
+
+using BenchmarkTools
+@benchmark AsymptoticPosterior($n_big_4, $init8, Val(8))
+@benchmark four_num_sum.(($ap,), 1:8)
+@benchmark AsymptoticPosterior($n_big_4c, $initCorr10, Val(10))
+@benchmark four_num_sum.(($apc,), 1:10)
+
+
+low_sensitivity = CorrErrors((0.1,0.2,0.3,0.4), (0.8, 0.8), (0.98,0.98))
+low_specificity = CorrErrors((0.1,0.2,0.3,0.4), (0.98, 0.98), (0.8,0.8))
+
 using AsymptoticPosteriors
 include("/home/chris/Documents/progwork/julia/NGS.jl")
 f3(x) = NGS(cdb4, x, Val{8}())
 @time ap = AsymptoticPosterior(f3, initial_x, Val(8));
 quantile(ap, 0.025)
+
+interval(ap, ind) = (quantile(ap, 0.025, ind), quantile(ap, 0.975, ind))
+@benchmark interval($ap, 1)
+@benchmark interval($ap, 2)
+@benchmark interval($ap, 3)
+@benchmark interval($ap, 4)
+@benchmark interval($ap, 5)
+@benchmark interval($ap, 6)
+@benchmark interval($ap, 7)
+@benchmark interval($ap, 8)
+
+@benchmark AsymptoticPosterior(f3, $initial_x, Val(8))
+@benchmark AsymptoticPosteriors.fit!($ap.pl.map, $initial_x)
 
 
 using Revise, AsymptoticPosteriors

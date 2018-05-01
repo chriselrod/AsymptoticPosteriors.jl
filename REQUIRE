@@ -6,3 +6,4 @@ LineSearches
 SpecialFunctions
 ForwardDiff
 DiffResults
+RecipesBase

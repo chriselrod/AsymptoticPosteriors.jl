@@ -5,12 +5,12 @@ function no_convergence(xn0, xn1, fxn1, options)
 end #on ifelse: isn't there going to be a branch anyway when the calling program checks whether this returned true/faslse?
 
 @inline function initial_conditions(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
-    fx0 = ap.pl.rstar[]
     @inbounds begin
+        fx0 = ap.pl.rstar[]
         x0 = ap.pl.map.θhat[i]
         x1 = x0 + fx0 * ap.pl.map.std_estimates[i] # inverse slope
     end
-    fx1, s = fdf_adjrstar_p(ap.pl, x1, i)
+    fx1, s = fdf_adjrstar_p(ap.pl, x1, i, Val{true}())
 
     x0, fx0, x1, fx1, s
 
@@ -31,7 +31,7 @@ function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
 
     debug_rootsearch() && @show ap.pl.rstar[]
     fx0 = fx1
-    fx1, s = fdf_adjrstar_p(ap.pl, x1, i)
+    fx1, s = fdf_adjrstar_p(ap.pl, x1, i, Val{false}())
     debug_rootsearch() && @show fx1, ap.pl(x1, i)
     # fx1, fx0 = ap.pl(x1, i), fx1
 
@@ -44,7 +44,7 @@ function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
         x1, x0 = x1 + fx1 / s, x1
         # fx1, fx0 = ap.pl(x1, i), fx1
         fx0 = fx1
-        fx1, s = fdf_adjrstar_p(ap.pl, x1, i)
+        fx1, s = fdf_adjrstar_p(ap.pl, x1, i, Val{false}())
         debug_rootsearch() && @show (fx1, fx0)
         not_converged = no_convergence(x0, x1, fx1, ap.options)
     end

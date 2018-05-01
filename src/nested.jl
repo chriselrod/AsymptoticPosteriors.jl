@@ -136,7 +136,7 @@ end
 
 function ProfileLikelihood(f::F, map_::MAP, initial_x::A, ::Val{N}) where {F,T,A<:AbstractArray{T},N}
 
-    nuisance = Vector{T}(N-1)
+    nuisance = Vector{T}(undef, N-1)
     od = ProfileDifferentiable(f, nuisance, Val{N}())
     # Optim.LBFGS(linesearch=LineSearches.BackTracking())
 
@@ -232,20 +232,20 @@ function setinvH!(invH::AbstractMatrix{T}, cov::AbstractMatrix{T}, i::Int) where
     end
 end
 
-function pdf(pl::ProfileLikelihood, x)
+function profilepdf(pl::ProfileLikelihood, x, ::Val{reset_search}=Val{true}()) where reset_search
     i = profile_ind(pl::ProfileLikelihood)
     # expected_nuisance!(pl, x, i)
-    naive_expected_nuisance!(pl, x, i)
+    reset_search && naive_expected_nuisance!(pl, x, i)
     initial_state!(pl.state, pl.method, pl.od, pl.nuisance)
     setinvH!(pl.state.invH, pl.map.cov, i) # Approximate inverse hessian with hessian at maximum.
     θhat, nlmax = optimize_light(pl.od, pl.nuisance, pl.method, pl.map.options, pl.state)
     copyto!(pl.nuisance, θhat)
     pl.nlmax[] = nlmax
 end
-function pdf(pl::ProfileLikelihood, x, i)
+function profilepdf(pl::ProfileLikelihood, x, i, ::Val{reset_search}=Val{true}()) where reset_search
     set!(pl, x, i)
     # expected_nuisance!(pl, x, i)
-    naive_expected_nuisance!(pl, x, i)
+    reset_search && naive_expected_nuisance!(pl, x, i)
     initial_state!(pl.state, pl.method, pl.od, pl.nuisance)
     setinvH!(pl.state.invH, pl.map.cov, i) # Approximate inverse hessian with hessian at maximum.
     θhat, nlmax = optimize_light(pl.od, pl.nuisance, pl.method, pl.map.options, pl.state)
@@ -253,12 +253,12 @@ function pdf(pl::ProfileLikelihood, x, i)
     pl.nlmax[] = nlmax
 end
 
-function (pl::ProfileLikelihood)(theta, i = profile_ind(pl))
+function (pl::ProfileLikelihood)(theta, i = profile_ind(pl), ::Val{reset_search}=Val{false}()) where reset_search
     debug() && println("")
     debug() && @show theta, pl.rstar[], i
     # @assert isnan(theta) == false
     debug() && @show rstar_p(pl, theta, i) + pl.rstar[]
-    rstar_p(pl, theta, i) + pl.rstar[]
+    rstar_p(pl, theta, i, Val{reset_search}()) + pl.rstar[]
 end
 
 # Positive if x is smaller than mode, negative if bigger
@@ -266,9 +266,9 @@ function rp(pl::ProfileLikelihood, x, i = profile_ind(pl))
     copysign( sqrt(2(pl.nlmax[]-pl.map.nlmax[])), pl.map.θhat[i] - x)
 end
 
-function rstar_p(pl::ProfileLikelihood{N}, theta, i = profile_ind(pl)) where N
+function rstar_p(pl::ProfileLikelihood{N}, theta, i::Int=profile_ind(pl), ::Val{reset_search}=Val{true}()) where {N,reset_search}
 
-    pdf(pl, theta, i)
+    profilepdf(pl, theta, i, Val{reset_search}())
     set_buffer_to_profile!(pl, i)
 
     # pl.map.buffer[i], pl.map.buffer[N] = pl.map.buffer[N], pl.map.buffer[i]
@@ -294,14 +294,16 @@ function rstar_p(pl::ProfileLikelihood{N}, theta, i = profile_ind(pl)) where N
     r + log(qb(pl, theta, i)/r)/r
 end
 
-function fdf_adjrstar_p(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) where {N,T}
+# @inline function fdf_adjrstar_p(ap::AsymptoticPosterior, theta, i::Int=profile_ind(pl),::Val{reset_search}=Val{true}()) where reset_search
+#     fdf_adjrstar_p(ap.pl, theta, i,Val{reset_search}())
+# end
+function fdf_adjrstar_p(pl::ProfileLikelihood{N,T}, theta, i::Int=profile_ind(pl),::Val{reset_search}=Val{true}()) where {N,T,reset_search}
 
-    pdf(pl, theta, i)
+    profilepdf(pl, theta, i, Val{reset_search}())
     set_buffer_to_profile!(pl, i)
     setswap!(pl, i)
     hessian!(pl.map.od.config, pl.map.buffer)
     
-
     delta_log_likelihood = pl.nlmax[]-pl.map.nlmax[]
     r = copysign( sqrt(2delta_log_likelihood), pl.map.θhat[i] - theta)
     
@@ -325,6 +327,18 @@ function fdf_adjrstar_p(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) 
     rstar = r + log(q/r)/r
     rstar + pl.rstar[], exp(abs2(rstar)/2-delta_log_likelihood) / hess_adjust
 end
+function pdf(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl),::Val{reset_search}=Val{true}()) where {N,T,reset_search}
+
+    profilepdf(pl, theta, i, Val{reset_search}())
+    set_buffer_to_profile!(pl, i)
+    setswap!(pl, i)
+    hessian!(pl.map.od.config, pl.map.buffer)    
+
+    rootdet = choldet!(pl.subhess, UpperTriangular, ValM1(Val{N}())) #is there a more efficient way?
+
+    exp(pl.map.nlmax[]-pl.nlmax[]) / (sqrt(2π) * rootdet * pl.map.base_adjust[])
+end
+
 
 function qb(pl::ProfileLikelihood{N,T}, theta, i = profile_ind(pl)) where {N,T}
     grad = gradient(pl)
