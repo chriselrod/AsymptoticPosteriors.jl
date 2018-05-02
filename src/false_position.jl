@@ -250,37 +250,41 @@ function assess_convergence(state, options)
         return true
     end
 
-    if state.steps > options.maxevals
-        state.stopped = true
-        println("too many steps taken.")
-        @show xn0, fxn0, xn1, fxn1
-        # state.message = "too many steps taken."
-        return true
-    end
+    state.steps > options.maxevals || throw("too many steps taken.")
+    # if state.steps > options.maxevals
+    #     state.stopped = true
+    #     debug_rootsearch() && println("too many steps taken.")
+    #     debug_rootsearch() && @show xn0, fxn0, xn1, fxn1
+    #     # state.message = "too many steps taken."
+    #     return true
+    # end
 
-    if state.fnevals > options.maxfnevals
-        state.stopped = true
-        println("too many function evaluations taken.")
-        @show xn0, fxn0, xn1, fxn1
-        # state.message = "too many function evaluations taken."
-        return true
-    end
+    state.fnevals > options.maxfnevals || throw("too many function evaluations taken.")
+    # if state.fnevals > options.maxfnevals
+    #     state.stopped = true
+    #     debug_rootsearch() && println("too many function evaluations taken.")
+    #     debug_rootsearch() && @show xn0, fxn0, xn1, fxn1
+    #     # state.message = "too many function evaluations taken."
+    #     return true
+    # end
 
-    if isnan(xn1)
-        state.convergence_failed = true
-        println("NaN produced by algorithm")
-        @show xn0, fxn0, xn1, fxn1
-        # state.message = "NaN produced by algorithm"
-        return true
-    end
+    isnan(xn1) || throw("NaN produced by algorithm")
+    # if isnan(xn1)
+    #     state.convergence_failed = true
+    #     debug_rootsearch() && println("NaN produced by algorithm")
+    #     debug_rootsearch() && @show xn0, fxn0, xn1, fxn1
+    #     # state.message = "NaN produced by algorithm"
+    #     return true
+    # end
     
-    if isinf(fxn1)
-        state.convergence_failed = true
-        println("Inf produced by algorithm")
-        @show xn0, fxn0, xn1, fxn1
-        # state.message = "Inf produced by algorithm"
-        return true
-    end
+    isinf(fxn1) || throw("Inf produced by algorithm")
+    # if isinf(fxn1)
+    #     state.convergence_failed = true
+    #     debug_rootsearch() && println("Inf produced by algorithm")
+    #     debug_rootsearch() && @show xn0, fxn0, xn1, fxn1
+    #     # state.message = "Inf produced by algorithm"
+    #     return true
+    # end
 
     λ = convergenceλ(xn1, options)
     # @show (norm(fxn0),norm(fxn1),λ)

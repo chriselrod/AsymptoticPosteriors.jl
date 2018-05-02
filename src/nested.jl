@@ -1,8 +1,6 @@
 
 
 """Here, we take a much more straightforward approach to the implementation of Reid."""
-
-
 struct MAP{N,T,F,D<:AutoDiffDifferentiable{N,T,F},M,O,S}
     od::D
     method::M
