@@ -26,6 +26,7 @@ include("false_position.jl")
 include("nested.jl")
 include("initial_root_search.jl")
 include("linalg.jl")
+# include("plot_recipes.jl")
 # include("types.jl")
 
 end # module

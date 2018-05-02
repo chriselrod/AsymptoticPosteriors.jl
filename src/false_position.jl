@@ -133,7 +133,12 @@ end
 function find_zero!(state::UnivariateZeroState, fs::F, method::UnivariateZeroMethod, options::UnivariateZeroOptions) where F
     ## XXX Should just deprecate this in favor of FalsePosition method XXX
     while true
-        
+        if debug_rootsearch()
+            @show state.xn1, state.fxn1
+            @show state.xn0, state.fxn0
+            @show state.steps, options.maxevals
+            println("")
+        end
         val = assess_convergence(state, options)
 
         if val
@@ -249,8 +254,8 @@ function assess_convergence(state, options)
     if (state.x_converged || state.f_converged)
         return true
     end
-
-    state.steps > options.maxevals || throw("too many steps taken.")
+    debug_rootsearch() && @show state.steps, options.maxevals
+    state.steps > options.maxevals && throw("too many steps taken.")
     # if state.steps > options.maxevals
     #     state.stopped = true
     #     debug_rootsearch() && println("too many steps taken.")
@@ -259,7 +264,7 @@ function assess_convergence(state, options)
     #     return true
     # end
 
-    state.fnevals > options.maxfnevals || throw("too many function evaluations taken.")
+    state.fnevals > options.maxfnevals && throw("too many function evaluations taken.")
     # if state.fnevals > options.maxfnevals
     #     state.stopped = true
     #     debug_rootsearch() && println("too many function evaluations taken.")
@@ -268,7 +273,7 @@ function assess_convergence(state, options)
     #     return true
     # end
 
-    isnan(xn1) || throw("NaN produced by algorithm")
+    isnan(xn1) && throw("NaN produced by algorithm")
     # if isnan(xn1)
     #     state.convergence_failed = true
     #     debug_rootsearch() && println("NaN produced by algorithm")
@@ -277,7 +282,7 @@ function assess_convergence(state, options)
     #     return true
     # end
     
-    isinf(fxn1) || throw("Inf produced by algorithm")
+    isinf(fxn1) && throw("Inf produced by algorithm")
     # if isinf(fxn1)
     #     state.convergence_failed = true
     #     debug_rootsearch() && println("Inf produced by algorithm")
