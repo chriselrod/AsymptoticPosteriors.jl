@@ -132,14 +132,14 @@ function ProfileDifferentiable(f::F, x::A, ::Val{N}) where {F,T,A<:AbstractArray
     GDifferentiable(similar(x), similar(x), gradconfig, Val{N}())
 end
 
-function ProfileLikelihood(f::F, map_::MAP, initial_x::A, ::Val{N}) where {F,T,A<:AbstractArray{T},N}
+function ProfileLikelihood(f::F, map_::MAP, initial_x::A, ::Val{N}, LS = LineSearches.BackTracking()) where {F,T,A<:AbstractArray{T},N}
 
     nuisance = Vector{T}(undef, N-1)
     od = ProfileDifferentiable(f, nuisance, Val{N}())
     # Optim.LBFGS(linesearch=LineSearches.BackTracking())
 
     # backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.HagerZhang(), set_profile_cov, Optim.Flat())
-    backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.BackTracking(), set_profile_cov, Optim.Flat())
+    backtrack = Optim.BFGS(LineSearches.InitialStatic(), LS, set_profile_cov, Optim.Flat())
     # backtrack = LBFGS(10, LineSearches.InitialStatic(), LineSearches.BackTracking(), nothing, (P, x) -> nothing, Optim.Flat(), true)
 
 
@@ -157,11 +157,11 @@ end
 #Convenience function does a dynamic dispatch.
 AsymptoticPosterior(f, initial_x::AbstractArray) = AsymptoticPosterior(f, initial_x, Val(length(initial_x)))
 
-function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{N}) where {N,T,F}
+function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{N}, LS = LineSearches.BackTracking()) where {N,T,F}
 
     map_ = MAP(f, initial_x, Val{N}())
 
-    pl = ProfileLikelihood(f, map_, initial_x, Val{N}())
+    pl = ProfileLikelihood(f, map_, initial_x, Val{N}(), LS)
 
     options = UnivariateZeroOptions(T,zero(T),1e-7,4eps(T),1e-6)
     state = UnivariateZeroStateBase(zero(T),zero(T),zero(T),zero(T),0,2,false,false,false,false,"")
