@@ -13,12 +13,12 @@ import  Optim,
 
 const LinearAlgebra = Compat.LinearAlgebra
 
-export AsymptoticPosterior
+export AsymptoticPosterior, mode
 
 # debug() = true
+# debug_rootsearch() = true
 debug() = false
 debug_rootsearch() = false
-# debug_rootsearch() = true
 
 include("function_wrappers.jl")
 include("differentiable_objects.jl")

@@ -94,11 +94,11 @@ For DynamicHMC support. Copies data.
 """
 function (obj::GDifferentiable)(x)
     fdf(obj, x)
-    DiffResults.ImmutableDiffResult(obj.config.result.value, (copy(obj.config.derivs[1]),))
+    DiffResults.ImmutableDiffResult(-obj.config.result.value, (-1 .* obj.config.result.derivs[1],))
 end
 function (obj::LeanDifferentiable)(x)
     fdf(obj, x)
-    DiffResults.ImmutableDiffResult(obj.config.result.value, (copy(obj.config.derivs[1]),))
+    DiffResults.ImmutableDiffResult(-obj.config.result.value, (-1 .* obj.config.result.derivs[1],))
 end
 
 @inline function df(obj::AutoDiffDifferentiable, x)

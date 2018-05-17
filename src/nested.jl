@@ -157,8 +157,8 @@ end
 #Convenience function does a dynamic dispatch.
 AsymptoticPosterior(f, initial_x::AbstractArray) = AsymptoticPosterior(f, initial_x, Val(length(initial_x)))
 
-function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{N}, LS = LineSearches.BackTracking()) where {N,T,F}
-
+# function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{N}, LS = LineSearches.BackTracking()) where {N,T,F}
+function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{N}, LS = LineSearches.HagerZhang()) where {N,T,F}
     map_ = MAP(f, initial_x, Val{N}())
 
     pl = ProfileLikelihood(f, map_, initial_x, Val{N}(), LS)
@@ -436,3 +436,7 @@ function qquantile(ap::AsymptoticPosterior, alpha)
     ap.pl.rstar[] = Φ⁻¹(alpha)
     quadratic_search(ap, profile_ind(ap.pl))
 end
+
+
+(ap::AsymptoticPosterior)(x) = ap.pl.map.od(x)
+mode(ap::AsymptoticPosterior) = ap.pl.map.θhat

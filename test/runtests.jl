@@ -7,22 +7,46 @@ using Base.Test
 
 
 
-include("/home/chris/Documents/progwork/julia/NGSCov.jl")
-include("/home/chris/Documents/progwork/julia/NGStan.jl")
+include("/home/chris/Documents/progwork/julia/NGSCov.jl");
+include("/home/chris/Documents/progwork/julia/NGStan.jl");
 @time ap = AsymptoticPosterior(n_big_4, init8, Val(8));
 @time apc = AsymptoticPosterior(n_big_4c, initCorr10, Val(10));
 summary(ap)
 summary(apc)
 
 using BenchmarkTools
-@benchmark AsymptoticPosterior($n_big_4, $init8, Val(8))
-@benchmark four_num_sum.(($ap,), 1:8)
-@benchmark AsymptoticPosterior($n_big_4c, $initCorr10, Val(10))
+# @benchmark AsymptoticPosterior($n_big_4, $init8, Val(8))
+# @benchmark four_num_sum.(($ap,), 1:8)
+@benchmark AsymptoticPosterior($n_big_2c, $initCorr8, Val(8))
 @benchmark four_num_sum.(($apc,), 1:10)
 
 
-low_sensitivity = CorrErrors((0.1,0.2,0.3,0.4), (0.8, 0.8), (0.98,0.98))
-low_specificity = CorrErrors((0.1,0.2,0.3,0.4), (0.98, 0.98), (0.8,0.8))
+low_sensitivity = CorrErrors((0.1,0.2,0.3,0.4), (0.8, 0.8), (0.98,0.98));
+lowS1 = NoGoldDataCorr(low_sensitivity,100,200,16);
+ap_lows1 = AsymptoticPosterior(lowS1, initCorr10, Val(10));
+summary(ap_lows1)
+rstan(lowS1, 10_000)
+using RCall
+R"options(width=160)"
+summary(ap_lows1)
+R"summary(res)$summary"
+
+low_specificity = CorrErrors((0.1,0.2,0.3,0.4), (0.98, 0.98), (0.8,0.8));
+lowC1 = NoGoldDataCorr(low_specificity,100,200,16);
+ap_lowc1 = AsymptoticPosterior(lowC1, initCorr10, Val(10));
+summary(ap_lowc1)
+rstan(lowC1, 10_000)
+summary(ap_lowc1)
+R"summary(res)$summary"
+
+n =  [13   12; 17   20; 11   11; 59   57; 279  308; 721  692; 11   15; 19   15];
+test_data = NoGoldDataCorr{8}(n =n,
+αS1 = 16.0, βS1 = 4.0,
+αS2 = 16.0, βS2 = 4.0,
+αC1 = 16.0, βC1 = 4.0,
+αC2 = 16.0, βC2 = 4.0);
+@time apc = AsymptoticPosterior(test_data, initCorr8, Val(8));
+summary(apc)
 
 using AsymptoticPosteriors
 include("/home/chris/Documents/progwork/julia/NGS.jl")
