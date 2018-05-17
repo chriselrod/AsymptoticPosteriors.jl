@@ -10,11 +10,6 @@ function NoGoldStandard(priordata, S₁::T, S₂::T, C₁::T, C₂::T, π::Varar
         αC1, βC1, αC2, βC2 = priordata
     target = beta_lpdf(S₁, αS1, βS1) + beta_lpdf(S₂, αS2, βS2)
     target += beta_lpdf(C₁, αC1, βC1) + beta_lpdf(C₂, αC2, βC2)
-    # target += sum(pdf.(Beta( απ, βπ), pi))
-    # target += pdf(Beta( αS1, βS1), S₁)
-    # target += pdf(Beta( αS2, βS2), S₂)
-    # target += pdf(Beta( αC1, βC1), C₁)
-    # target += pdf(Beta( αC2, βC2), C₂)
     omS₁, omS₂, omC₁, omC₂ = 1-S₁, 1-S₂, 1-C₁, 1-C₂
     πₛ₁, πc₁ = S₁*S₂, C₁*C₂
     πₛ₂, πₛ₃ = S₁ - πₛ₁, S₂ - πₛ₁
