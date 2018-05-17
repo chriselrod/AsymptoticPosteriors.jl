@@ -140,7 +140,58 @@ Why consider this over MCMC? The primary advantage is speed. The example `simula
 The arguments of the function `run_simulation` are 1) a set of true values, 2) a number of times to double the sample size, 3) number of iterations per core, 4-6) initial sample sizes in common, for population 1 only, and for population 2 only.
 This script currently requires Julia 0.7.
 ```julia
-using Pkg
-include(joinpath(dir("AsymptoticPosteriors"),"examples","simulation.jl"))
-@time sim_results = run_simulation(truth, 6, 25, 50, 500, 15)
+julia> using Pkg
+julia> include(joinpath(dir("AsymptoticPosteriors"),"examples","simulation.jl"))
+julia> @time sim_results = run_simulation(truth, 6, 25, 50, 500, 15)
+  9.943541 seconds (6.53 M allocations: 618.108 MiB, 1.85% gc time) # first run
+julia> @time sim_results2 = run_simulation(truth, 6, 25, 50, 500, 15)
+  0.800223 seconds (10.21 k allocations: 608.328 KiB)
+```
+My computer created 32 proccesses, so I would have runs on 32*25 = 800 simulated data sets per sample size, and 6 total sample sizes. Below, the rows are % of nominally 95% intervals that did not contain the true value, interval width, and bias. Columns are the parameters, in the same order as earlier. The third axis is sample size.
+
+```julia
+julia> sim_results ./ 800
+3×6×6 Array{Float64,3}:
+[:, :, 1] =
+ 0.00875    0.07375   0.0475     0.005     0.02875    0.02625  
+ 0.274983   0.362657  0.158      0.113806  0.18615    0.231495 
+ 0.0444912  0.113396  0.0313643  0.017162  0.0364605  0.0434652
+
+[:, :, 2] =
+ 0.01125    0.05875    0.05       0.00375    0.0425     0.02875  
+ 0.215669   0.289797   0.121236   0.0852453  0.141287   0.170694 
+ 0.0355101  0.0831038  0.0225661  0.0116452  0.0275872  0.0312048
+
+[:, :, 3] =
+ 0.0275     0.03875   0.0425     0.01875    0.02875    0.01375  
+ 0.169357   0.217423  0.0838131  0.0664477  0.0996576  0.126227 
+ 0.0282633  0.056161  0.0162027  0.0105556  0.019045   0.0226534
+
+[:, :, 4] =
+ 0.03625    0.03875   0.04625    0.03        0.0475     0.0375   
+ 0.13132    0.164174  0.0584912  0.0514795   0.0710274  0.0941736
+ 0.0234209  0.040266  0.0116276  0.00905754  0.0142739  0.0177669
+
+[:, :, 5] =
+ 0.035      0.0375     0.03625     0.02875    0.04       0.04     
+ 0.098786   0.124138   0.0411949   0.0392949  0.0508231  0.0697837
+ 0.0176658  0.0281211  0.00864126  0.0069628  0.010287   0.013574 
+
+[:, :, 6] =
+ 0.03875    0.04375    0.03125     0.04625     0.035      0.04375   
+ 0.0712341  0.0943652  0.0293333   0.028532    0.0363106  0.0505392 
+ 0.0136513  0.0198359  0.00589169  0.00540186  0.0071609  0.00978058
+```
+Figuring out the sample size needed to hit a required interval width does not have to take long -- about 0.8 seconds to generate and analyze 4800 data sets with this model on this test rig:
+```julia
+julia> versioninfo()
+Julia Version 0.7.0-DEV.5021
+Commit bfb1c1b* (2018-05-06 00:40 UTC)
+Platform Info:
+  OS: Linux (x86_64-pc-linux-gnu)
+  CPU: AMD Ryzen Threadripper 1950X 16-Core Processor
+  WORD_SIZE: 64
+  LIBM: libopenlibm
+  LLVM: libLLVM-6.0.0 (ORCJIT, znver1)
+Environment:
 ```

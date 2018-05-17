@@ -1,10 +1,11 @@
 
 using Distributed
-addprocs();
+addprocs(16);
 
 @everywhere begin
-include(joinpath(Pkg.dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
-import LineSearches
+using Pkg
+include(joinpath(dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
+using LineSearches
 truth = CorrErrors((0.1, 0.4), (0.9, 0.95), (0.85,0.97));
 data = NoGoldData(truth,1600,3200,252);
 @time apc = AsymptoticPosterior(data, randn(6), Val(6), LineSearches.HagerZhang());
