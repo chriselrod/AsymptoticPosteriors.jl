@@ -503,8 +503,8 @@ end
 
 interval(ap, alpha, ind) = (quantile(ap,alpha/2,ind), quantile(ap,1-alpha/2,ind))
 four_num_sum(ap, ind) = (quantile(ap,0.025,ind), quantile(ap,0.25,ind), quantile(ap,0.75,ind), quantile(ap,0.975,ind))
-function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T,NoGoldData{N}}; sigfigs=4) where {N,T}
-    @static if VERSION < v"0.6.4"
+function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs=4) where {N,T}
+    @static if VERSION < v"0.7-"
         sig(x, s) = signif(x, s)
     else
         sig(x, s) = round(x, sigdigits = s)
@@ -517,22 +517,22 @@ function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T,NoGoldDat
         println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+4)), sigfigs))
     end
 end
-function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T,NoGoldDataCorr{N}}; sigfigs=4) where {N,T}
-    @static if VERSION < v"0.6.4"
-        sig(x, s) = signif(x, s)
-    else
-        sig(x, s) = round(x, sigdigits = s)
-    end
-    println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
-    println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
-    println("C1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, sigfigs))
-    println("C2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 4)) .+1) ./ 2, sigfigs))
-    println("Cov1:\t\t\t\t", sig.(exp.(four_num_sum(ap, 5)), sigfigs))
-    println("Cov2:\t\t\t\t", sig.(exp.(four_num_sum(ap, 6)), sigfigs))
-    for i in 1:N-6
-        println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+6)), sigfigs))
-    end
-end
+# function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T,NoGoldDataCorr{N}}; sigfigs=4) where {N,T}
+#     @static if VERSION < v"0.7-"
+#         sig(x, s) = signif(x, s)
+#     else
+#         sig(x, s) = round(x, sigdigits = s)
+#     end
+#     println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
+#     println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
+#     println("C1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, sigfigs))
+#     println("C2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 4)) .+1) ./ 2, sigfigs))
+#     println("Cov1:\t\t\t\t", sig.(exp.(four_num_sum(ap, 5)), sigfigs))
+#     println("Cov2:\t\t\t\t", sig.(exp.(four_num_sum(ap, 6)), sigfigs))
+#     for i in 1:N-6
+#         println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+6)), sigfigs))
+#     end
+# end
 
 
 

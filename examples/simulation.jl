@@ -3,12 +3,21 @@ using Distributed
 addprocs();
 
 @everywhere begin
-using Pkg
-include(joinpath(dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
-using LineSearches
+# using Pkg
+# include(joinpath(dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
+
+
+include("/home/chris/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
+using LineSearches, TriangularMatrices, Statistics
+# using DifferentiableObjects
+
 truth = CorrErrors((0.1, 0.4), (0.9, 0.95), (0.85,0.97));
 data = NoGoldData(truth,1600,3200,252);
-@time apc = AsymptoticPosterior(data, randn(6), Val(6), LineSearches.HagerZhang());
+x = TriangularMatrices.randvec(6);
+@time apc = AsymptoticPosterior(data, x, LineSearches.HagerZhang());
+@time quantile(apc, 0.025)
+
+# @time apc = AsymptoticPosterior(data, randn(6), Val(6), LineSearches.HagerZhang());
 summary(apc)
 
 

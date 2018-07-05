@@ -87,7 +87,7 @@ end
 
 abstract type UnivariateZeroState{T,S} end
 
-mutable struct UnivariateZeroStateBase{T,S,AS<:AbstractString} <: UnivariateZeroState{T,S}
+mutable struct UnivariateZeroStateBase{T,S} <: UnivariateZeroState{T,S}
     # xn2::T
     xn1::T
     xn0::T
@@ -100,7 +100,7 @@ mutable struct UnivariateZeroStateBase{T,S,AS<:AbstractString} <: UnivariateZero
     x_converged::Bool         # converged via |x_n - x_{n-1}| < ϵ
     f_converged::Bool         # converged via |f(x_n)| < ϵ
     convergence_failed::Bool
-    message::AS
+    message::String
 end
 function UnivariateZeroStateBase(method::AbstractBisection, fs::F, x::Tuple{T,T}) where {T <: Real, F}
     x0, x2 = x

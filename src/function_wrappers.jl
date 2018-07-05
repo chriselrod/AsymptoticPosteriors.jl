@@ -1,13 +1,18 @@
 
-struct ProfileWrapper{N,F,T,A<:AbstractArray{T},B<:AbstractArray}#,C<:AbstractArray}
+
+# Should also use FunctionWrappers.jl once that supports Julia 0.7
+# to avoid excessive recompilation.
+
+
+struct ProfileWrapper{N,F,T,T2}#,C<:AbstractArray}
     f::F
-    x::A
-    y::B
+    x::RecursiveVector{T,N}
+    y::RecursiveVector{T2,N}
     # z::C
     i::Base.RefValue{Int}
     v::Base.RefValue{T}
 end
-function (pw::ProfileWrapper{N,F,T,A})(x::A) where {N,F,T,A <: AbstractArray}
+function (pw::ProfileWrapper{N,F,T})(x::RecursiveVector{T}) where {N,F,T}
     debug() && @show x
     @inbounds begin
         for i in 1:pw.i[]-1
@@ -21,7 +26,7 @@ function (pw::ProfileWrapper{N,F,T,A})(x::A) where {N,F,T,A <: AbstractArray}
     debug() && @show pw.x
     - pw.f(pw.x)
 end
-function (pw::ProfileWrapper{N,F,T,A,B})(y::B) where {N,F,T,A,B <: AbstractArray}
+function (pw::ProfileWrapper{N,F,T,T2})(y::RecursiveVector{T2}) where {N,F,T,T2}
     # @show y
     @inbounds begin
         for i in 1:pw.i[]-1
@@ -35,31 +40,7 @@ function (pw::ProfileWrapper{N,F,T,A,B})(y::B) where {N,F,T,A,B <: AbstractArray
     # @show pw.y
     - pw.f(pw.y)
 end
-# function (pw::ProfileWrapper{N,F,T,A,B,C})(z::C) where {N,F,T,A,B,C}
-#     @inbounds begin
-#         for i in 1:pw.i[]-1
-#             pw.z[i] = z[i]
-#         end
-#         # pw.x[pw.i[]] = pw.v[]
-#         for i in pw.i[]+1:N
-#             pw.z[i] = z[i-1]
-#         end
-#     end
-#     - pw.f(pw.z)
-# end
-# function (pw::ProfileWrapper{N})(w) where N #fallback method
-#     wc = Vector{eltype(w)}(undef, N)
-#     @inbounds begin
-#         for i in 1:pw.i[]-1
-#             wc[i] = w[i]
-#         end
-#         wc[pw.i[]] = pw.v[]
-#         for i in pw.i[]+1:N
-#             wc[i] = w[i-1]
-#         end
-#     end
-#     - pw.f(wc)
-# end
+
 function set!(pw::ProfileWrapper, v, i::Int)
     pw.v[] = v
     pw.i[] = i
