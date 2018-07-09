@@ -71,8 +71,6 @@ function MAP(f, initial_x::RecursiveVector{T,N}) where {T,N}
     cov_mat = SymmetricMatrix{T,N}()
 
     map_ = MAP(od, backtrack, options, state, similar(initial_x), similar(initial_x), Ref{T}(), Ref{T}(), similar(initial_x), cov_mat)
-
-    fit!(map_, initial_x)
 end
 function MAP(od::D, method::M, options::O, state::S, θhat::RecursiveVector{T,N}, buffer::RecursiveVector{T,N}, nlmax::Base.RefValue{T}, base_adjust::Base.RefValue{T}, std_estimates::RecursiveVector{T,N}, cov_mat::SymmetricMatrix{T,N,L}) where {N,T,D<:DifferentiableObject{N},M,O,S,L}
     MAP{N,T,D,M,O,S,L}(od, method, options, state, θhat, buffer, nlmax, base_adjust, std_estimates, cov_mat)
@@ -141,7 +139,6 @@ function ProfileDifferentiable(f::F, x::RecursiveVector{T,Nm1}, ::Val{N}) where 
 end
 
 @generated function ProfileLikelihood(f, map_::MAP, initial_x::RecursiveVector{T,N}, LS = LineSearches.BackTracking()) where {T,N}
-
     quote
         nuisance = RecursiveVector{$T,$(N-1)}()
         od = ProfileDifferentiable(f, nuisance, Val{$N}())
@@ -157,8 +154,6 @@ end
 
         ProfileLikelihood(od, backtrack, state, map_, nuisance)
     end
-
-    # fit!(map_, initial_x)
 end
 function ProfileLikelihood(od::D, method::M, state::S, map_::MAP_, nuisance::RecursiveVector{T,Nm1}) where {N,T,Nm1,D<:DifferentiableObject{Nm1},M,S,MAP_ <: MAP{N}}
     ProfileLikelihood{N,T,Nm1,D,M,S,MAP_}(od, method, state, map_, nuisance, Ref{T}(), Ref{Float64}())#, @view(hessian(map_)[1:N-1,1:N-1]))
@@ -174,7 +169,16 @@ end
 # function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{N}, LS = LineSearches.BackTracking()) where {N,T,F}
 function AsymptoticPosterior(f, initial_x::RecursiveVector{T,N}, LS = LineSearches.HagerZhang()) where {N,T}
     map_ = MAP(f, initial_x)
+    fit!(map_, initial_x)
+    pl = ProfileLikelihood(f, map_, initial_x, LS)
 
+    options = UnivariateZeroOptions(T,zero(T),1e-7,4eps(T),1e-6)
+    state = UnivariateZeroStateBase(zero(T),zero(T),zero(T),zero(T),0,2,false,false,false,false,"")
+    AsymptoticPosterior(pl, state, options)
+end
+function AsymptoticPosterior(::UndefInitializer, f, initial_x::RecursiveVector{T,N}, LS = LineSearches.HagerZhang()) where {N,T}
+    map_ = MAP(f, initial_x)
+    # fit!(map_, initial_x)
     pl = ProfileLikelihood(f, map_, initial_x, LS)
 
     options = UnivariateZeroOptions(T,zero(T),1e-7,4eps(T),1e-6)

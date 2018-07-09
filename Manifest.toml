@@ -62,7 +62,7 @@ version = "0.0.6"
 
 [[DifferentiableObjects]]
 deps = ["DiffResults", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "Parameters", "TriangularMatrices"]
-git-tree-sha1 = "c008572e2af985f271995b277e97933b9c16369d"
+git-tree-sha1 = "c0ad3092ef4fec741314c8303fdea09fb0282b80"
 repo-rev = "master"
 repo-url = "https://github.com/chriselrod/DifferentiableObjects.jl"
 uuid = "e829a12a-7dbf-11e8-18a8-f94f525a9d85"
@@ -165,9 +165,9 @@ version = "0.6.0"
 
 [[StaticArrays]]
 deps = ["InteractiveUtils", "LinearAlgebra", "Random", "Statistics", "Test"]
-git-tree-sha1 = "acc0208265c71e22f90c83bbd3d92d7a3bc0ea6f"
+git-tree-sha1 = "d998a83bc2cd507e12b08203e7523f2e60ac9ee6"
 uuid = "90137ffa-7385-5640-81b9-e52037218182"
-version = "0.8.0"
+version = "0.8.2"
 
 [[Statistics]]
 uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -177,7 +177,7 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[TriangularMatrices]]
 deps = ["LinearAlgebra", "MacroTools", "StaticArrays"]
-git-tree-sha1 = "eb45403bc01e26bd94e25245252f2a8a132d76f4"
+git-tree-sha1 = "c4c2798f5a004cb8fc2c9d194e3114252d32c747"
 repo-rev = "master"
 repo-url = "https://github.com/chriselrod/TriangularMatrices.jl"
 uuid = "5ebe76dc-7dd7-11e8-2992-2706ab89a682"

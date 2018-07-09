@@ -439,8 +439,10 @@ end
 @generated ValP6(::Val{N}) where N = Val{N+6}()
 @generated ValP4(::Val{N}) where N = Val{N+4}()
 @generated function NoGoldData(Θ::CorrErrors{P,T}, n_common::Int, n_1_only::Int, n_2_only::Int; kwargs...) where {P,T}
-    N = P+4
-    :(NoGoldData{$N}(n = gen_data(Θ,  n_common,  n_1_only,  n_2_only), kwargs...))
+    :(NoGoldData{$(P+4)}(n = gen_data(Θ,  n_common,  n_1_only,  n_2_only), kwargs...))
+end
+@generated function NoGoldData(Θ::CorrErrors{P,T}; kwargs...) where {P,T}
+    :(NoGoldData{$(P+4)}(n = Matrix{Int}(undef,8,$P), kwargs...))
 end
 function NoGoldData(Θ::CorrErrors{P}, n_common::Int, n_1_only::Int, n_2_only::Int; kwargs...) where P
     NoGoldData(ValP4(Val{P}()); n = gen_data(Θ,  n_common,  n_1_only,  n_2_only), kwargs...)
