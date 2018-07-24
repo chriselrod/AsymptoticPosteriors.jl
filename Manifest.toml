@@ -177,7 +177,7 @@ uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [[TriangularMatrices]]
 deps = ["LinearAlgebra", "MacroTools", "StaticArrays"]
-git-tree-sha1 = "c4c2798f5a004cb8fc2c9d194e3114252d32c747"
+git-tree-sha1 = "642eafb506d7b40b8c53d83a5580c16a6d730af4"
 repo-rev = "master"
 repo-url = "https://github.com/chriselrod/TriangularMatrices.jl"
 uuid = "5ebe76dc-7dd7-11e8-2992-2706ab89a682"

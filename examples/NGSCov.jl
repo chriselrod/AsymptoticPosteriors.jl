@@ -1,6 +1,4 @@
 
-using AsymptoticPosteriors, Parameters, Rmath
-
 
 @inline beta_lpdf(x, alpha, beta) = (alpha-1)*log(x) + (beta-1)*log(1-x)
 
@@ -113,8 +111,6 @@ end
 
 
 
-using Compat
-using Base.Cartesian, Compat.Random#, LinearAlgebra
 struct Multinomial{N,T}
     n::Int
     p::NTuple{N,T}
@@ -294,7 +290,27 @@ function gen_data!(out::Matrix{Int}, Θ::CorrErrors{P,T}, n_common::Int, n_1_onl
     end
     out
 end
-
+function gen_data!(out::Matrix{Int}, Θ::CorrErrors{P,T}, n_common::NTuple{P,Int}, n_1_only::NTuple{P,Int}, n_2_only::NTuple{P,Int}) where {P,T}
+    for p ∈ 1:P
+        cum_p = zero(T)
+        x = rbinom(1, n_common[p], Θ.p_stick[p][1])[1]
+        out[1,p] = x
+        n = n_common[p] - x
+        x = rbinom(1, n, Θ.p_stick[p][2])[1]
+        out[2,p] = x
+        n -= x
+        x = rbinom(1, n, Θ.p_stick[p][3])[1]
+        out[3,p] = x
+        out[4,p] = n - x
+        x = rbinom(1, n_1_only[p], Θ.p_marginal1[p])[1]
+        out[5,p] = x
+        out[6,p] = n_1_only[p] - x
+        x = rbinom(1, n_2_only[p], Θ.p_marginal2[p])[1]
+        out[7,p] = x
+        out[8,p] = n_2_only[p] - x
+    end
+    out
+end
 # corr_errors_independent2 = CorrErrors((0.1,        0.4), (0.9, 0.95), (0.85,0.97));
 # corr_errors_independent3 = CorrErrors((0.1,  0.25, 0.4), (0.9, 0.95), (0.85,0.97));
 # corr_errors_independent4 = CorrErrors((0.1,0.2,0.3,0.4), (0.9, 0.95), (0.85,0.97));
