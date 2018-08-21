@@ -4,7 +4,7 @@ module AsymptoticPosteriors
 
 using   LinearAlgebra, # special functions and LinearAlgebra ought to be clear enough.
         SpecialFunctions,
-        TriangularMatrices,
+        SIMDArrays,
         DifferentiableObjects,
         Statistics,
         LineSearches
@@ -17,6 +17,8 @@ import  ForwardDiff,#, StaticArrays, DiffEqDiffTools # import, so namespace acce
 # const LinearAlgebra = Compat.LinearAlgebra
 
 export AsymptoticPosterior, mode
+
+# const SizedArray{P,T} = Union{SizedSIMDVector{P,T}, }
 
 # debug() = true
 # debug_rootsearch() = true
