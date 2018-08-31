@@ -5,6 +5,7 @@ module AsymptoticPosteriors
 using   LinearAlgebra, # special functions and LinearAlgebra ought to be clear enough.
         SpecialFunctions,
         SIMDArrays,
+        jBLAS,
         DifferentiableObjects,
         Statistics,
         LineSearches

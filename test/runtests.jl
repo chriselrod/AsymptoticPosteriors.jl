@@ -7,8 +7,8 @@ using Base.Test
 
 
 
-include("/home/chris/Documents/progwork/julia/NGSCov.jl");
-include("/home/chris/Documents/progwork/julia/NGStan.jl");
+include(joinpath(dirname(pathof(AsymptoticPosteriors)), "../examples/NGSCov.jl"));
+# include("/home/chris/Documents/progwork/julia/NGStan.jl");
 @time ap = AsymptoticPosterior(n_big_4, init8, Val(8));
 @time apc = AsymptoticPosterior(n_big_4c, initCorr10, Val(10));
 summary(ap)
@@ -218,5 +218,3 @@ dlp2 - estimated_dlp2
 
 phi = inv(precise_hessian2);
 estimated_dlp3 = precise_grad2[1] / (phi[1] * precise_hessian2[1] )
-
-

@@ -52,7 +52,7 @@ function set_identity(invH::AbstractMatrix{T}, x::AbstractArray{T}) where T
         for j in i+1:length(x)
             invH[j,i] = zero(T)
         end
-    end            
+    end
 end
 
 function MAP(f, initial_x::SizedSIMDVector{P,T}) where {T,P}
@@ -93,18 +93,12 @@ function fit!(map_::MAP{P}, initial_x) where P
     map_.nlmax[] = nlmax
     copyto!(map_.θhat, θhat)
 
-    hessian!(map_.od.config, θhat) 
+    hessian!(map_.od.config, θhat)
 
     # @show inv(hessian(map_))
     # @show hessian(map_)
     map_.base_adjust[] = 1 / invdet!(map_.cov, hessian(map_))
-    # inv!(map_.cov) # potri! = chol2inv!
-    # xxt!(map_.cov)
     @inbounds for i ∈ 1:P
-        #Fill in bottom half, because gemm/gemv are much faster than symm/symv?
-        # for j ∈ 1:i-1
-        #     map_.cov[i,j] = map_.cov[j,i]
-        # end
         map_.std_estimates[i] = sqrt(map_.cov[i,i])
     end
 
@@ -113,8 +107,8 @@ function fit!(map_::MAP{P}, initial_x) where P
 end
 
 # set_profile_cov(x::SizedSIMDVector{P,T}) where {T,P} = SymmetricMatrix{T,P}()
-# #Skip in the profile update, so we can manually set it to 
-# set_profile_cov(x, y) = nothing 
+# #Skip in the profile update, so we can manually set it to
+# set_profile_cov(x, y) = nothing
 
 function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T}, ::Val{P}) where {F,T,Pm1,P}
 
@@ -341,14 +335,14 @@ end
         set_buffer_to_profile!(pl, p_i)
         setswap!(pl, p_i)
         hess = hessian!(pl.map.od.config, pl.map.buffer)
-        
+
         delta_log_likelihood = pl.nlmax[]-pl.map.nlmax[]
         r = copysign( sqrt(2delta_log_likelihood), pl.map.θhat[p_i] - theta)
-        
+
         grad = gradient(pl)
 
         rootdet = invdet!(hessian(pl), Val{$(P-1)}())
-        
+
         prof_factor = zero(T)
         $q
         # @inbounds for i in 1:P-1
@@ -371,11 +365,11 @@ function pdf(pl::ProfileLikelihood{P,T,Pm1}, theta, i = profile_ind(pl),::Val{re
     profilepdf(pl, theta, i, Val{reset_search}())
     set_buffer_to_profile!(pl, i)
     setswap!(pl, i)
-    hessian!(pl.map.od.config, pl.map.buffer)    
+    hessian!(pl.map.od.config, pl.map.buffer)
 
     # is there a more efficient way of calculating the determinant?
     # skip storing? Implement that...
-    rootdet = choldet!(hessian(pl), Val{Pm1}()) 
+    rootdet = choldet!(hessian(pl), Val{Pm1}())
 
     exp(pl.map.nlmax[]-pl.nlmax[]) / (sqrt(2π) * rootdet * pl.map.base_adjust[])
 end
