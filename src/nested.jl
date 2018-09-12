@@ -211,7 +211,7 @@ function rstar_p(ap::AsymptoticPosterior{P}, theta, i::Int=profile_ind(ap)) wher
 end
 
 sym(a,i) = Symbol(a, :_, i)
-function profile_correction_quote(P, R, ::Type{T}) where T
+function profile_correction_quote(P, R, T)
     VL = min(P, jBLAS.REGISTER_SIZE ÷ sizeof(T))
     VLT = VL * sizeof(T)
     V = SIMD.Vec{VL,T}
@@ -219,11 +219,15 @@ function profile_correction_quote(P, R, ::Type{T}) where T
     # qa = q.args[2].args[3].args[3].args
     q = quote end
     qa = q.args
-    iter = P ÷ VL
+    iter = R ÷ VL # number of iterations down the columns of the matrix.
     push!(qa, :(ptr_Li = pointer(Li)))
-    push!(qa, :(@inbounds $(sym(:vH,0)) = $V(hess[1]) ))
+    push!(qa, :(@inbounds $(sym(:vH,0)) = $V(hess[1,$P]) ))
     push!(qa, :(@inbounds $(sym(:vG,0)) = $V(grad[1]) ))
-    for r ∈ 0:iter-1 #ps = 0
+    # r = 0
+    push!(qa, :($(sym(:vL,0)) = vload($V, ptr_Li) ))
+    push!(qa, :($(sym(:vHL,0)) = $(sym(:vH,0))*$(sym(:vL,r)) ))
+    push!(qa, :($(sym(:vGL,0)) = $(sym(:vG,0))*$(sym(:vL,r)) ))
+    for r ∈ 1:iter-1 #ps = 0
         push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT)) ))
         push!(qa, :($(sym(:vHL,r)) = $(sym(:vH,0))*$(sym(:vL,r)) ))
         push!(qa, :($(sym(:vGL,r)) = $(sym(:vG,0))*$(sym(:vL,r)) ))
@@ -231,10 +235,10 @@ function profile_correction_quote(P, R, ::Type{T}) where T
     itermin = 0
     for pb ∈ 0:VL:P-2
         for ps ∈ max(1,pb):min( pb+VL-1, P-2 )
-            push!(qa, :(@inbounds $(sym(:vH,ps)) = $V(hess[$(ps+1)])))
+            push!(qa, :(@inbounds $(sym(:vH,ps)) = $V(hess[$(ps+1),$P])))
             push!(qa, :(@inbounds $(sym(:vG,ps)) = $V(grad[$(ps+1)])))
             for r ∈ itermin:iter-1
-                push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT) + $(sizeof(T)*R*ps))))
+                push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT + sizeof(T)*R*ps))))
                 push!(qa, :($(sym(:vHL,r)) = fma($(sym(:vH,ps)),$(sym(:vL,r)),$(sym(:vHL,r))) ))
                 push!(qa, :($(sym(:vGL,r)) = fma($(sym(:vG,ps)),$(sym(:vL,r)),$(sym(:vGL,r))) ))
             end
