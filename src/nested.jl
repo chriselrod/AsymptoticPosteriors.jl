@@ -1,156 +1,111 @@
 
 
 """Here, we take a much more straightforward approach to the implementation of Reid."""
-struct MAP{P,T,D<:DifferentiableObject{P},M,O,S,L}
+struct MAP{P,T,R,D<:DifferentiableObject{P},M,S,L}
     od::D
     method::M
-    options::O
     state::S
-    θhat::SizedSIMDVector{P,T}
-    buffer::SizedSIMDVector{P,T}
+    θhat::SizedSIMDVector{P,T,R}
+    buffer::SizedSIMDVector{P,T,R}
     nlmax::Base.RefValue{T}
     base_adjust::Base.RefValue{T}
-    std_estimates::SizedSIMDVector{P,T}
-    cov::SymmetricMatrix{T,P,L}
+    std_estimates::SizedSIMDVector{P,T,R}
+    Lfull::SizedSIMDMatrix{P,P,T,R,L}
 end
 
-struct ProfileLikelihood{P,T,Pm1,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T}}
+struct AsymptoticPosterior{P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T,R},SV <: SizedSIMDVector{Pm1,T},SM <: SizedSIMDMatrix{Pm1,Pm1,T}}
     od::D
     method::M
     state::S
     map::MAP_
-    nuisance::SizedSIMDVector{Pm1,T}#A
+    nuisance::SV#A
     nlmax::Base.RefValue{T}
-    rstar::Base.RefValue{Float64}
+    rstar::Base.RefValue{T}
+    Lsmall::SM
     # subhess::SubArray{T,2,Array{T,2},Tuple{UnitRange{Int64},UnitRange{Int64}},false}
 end
-set!(pl::ProfileLikelihood, v, i) = set!(pl.od.config.f, v, i)
-setswap!(map_::MAP, i) = map_.od.config.f.i[] = i
-setswap!(pl::ProfileLikelihood, i) = pl.map.od.config.f.i[] = i
-
-struct AsymptoticPosterior{P,T,PL <: ProfileLikelihood{P,T}}
-    pl::PL
-    state::UnivariateZeroStateBase{T,T}
-    options::UnivariateZeroOptions{T}
-end
-
-function AsymptoticPosterior(pl::PL,state::UnivariateZeroStateBase{T,T},options::UnivariateZeroOptions{T}) where {P,T,PL <: ProfileLikelihood{P,T}}
-    AsymptoticPosterior{P,T,PL}(pl,state,options)
-end
-
-# @generated function MAP(f, ::Val{P}) where P
-#     :(MAP(f, SizedSIMDVector{$(P+1),Float64}(undef)))
-# end
-
-set_identity(x) = Matrix{eltype(x)}(I, length(x), length(x))
-function set_identity(invH::AbstractMatrix{T}, x::AbstractArray{T}) where T
-    @inbounds for i in eachindex(x)
-        for j in 1:i-1
-            invH[j,i] = zero(T)
-        end
-        invH[i,i] = one(T)/10^2
-        for j in i+1:length(x)
-            invH[j,i] = zero(T)
-        end
-    end
-end
+@inline set!(ap::AsymptoticPosterior, v, i) = set!(ap.od.config.f, v, i)
+@inline setswap!(map_::MAP, i) = map_.od.config.f.i[] = i
+@inline setswap!(ap::AsymptoticPosterior, i) = ap.map.od.config.f.i[] = i
 
 function MAP(f, initial_x::SizedSIMDVector{P,T}) where {T,P}
 
-    # od = OnceDifferentiable(config.swap.f, df, fdf, initial_x, zero(T), Val{true}())
     od = TwiceDifferentiable(Swap(f, Val{P}()), Val{P}())
-    # Optim.LBFGS(linesearch=LineSearches.BackTracking())
 
-    # backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.HagerZhang(), set_identity, Optim.Flat())
-    backtrack = BFGS( linesearch = LineSearches.BackTracking())
-    # backtrack = Optim.LBFGS(10, LineSearches.InitialStatic(), LineSearches.BackTracking(), nothing, (P, x) -> nothing, Optim.Flat(), true)
+    state = DifferentiableObjects.BFGSState2(Val(P))
+    backtrack = DifferentiableObjects.BackTracking2(Val(3))
 
-    options = LightOptions()
-    state = DifferentiableObjects.uninitialized_state(initial_x)
+    Lfull = zero(SizedSIMDMatrix{P,P,T})
 
-    cov_mat = SymmetricMatrix{T,P}(undef)
-
-    map_ = MAP(od, backtrack, options, state, similar(initial_x), similar(initial_x), Ref{T}(), Ref{T}(), similar(initial_x), cov_mat)
+    map_ = MAP(od, backtrack, state, state.x_old, similar(initial_x), Ref{T}(), Ref{T}(), similar(initial_x), Lfull)
 end
-function MAP(od::D, method::M, options::O, state::S, θhat::SizedSIMDVector{P,T}, buffer::SizedSIMDVector{P,T}, nlmax::Base.RefValue{T}, base_adjust::Base.RefValue{T}, std_estimates::SizedSIMDVector{P,T}, cov_mat::SymmetricMatrix{T,P,L}) where {P,T,D<:DifferentiableObject{P},M,O,S,L}
-    MAP{P,T,D,M,O,S,L}(od, method, options, state, θhat, buffer, nlmax, base_adjust, std_estimates, cov_mat)
+function MAP(od::D, method::M, state::S, θhat::SizedSIMDVector{P,T}, buffer::SizedSIMDVector{P,T}, nlmax::Base.RefValue{T}, base_adjust::Base.RefValue{T}, std_estimates::SizedSIMDVector{P,T}, Lfull::SizedSIMDMatrix{P,P,T,R,L}) where {P,T,R,D<:DifferentiableObject{P},M,S,L}
+    MAP{P,T,R,D,M,S,L}(od, method, state, θhat, buffer, nlmax, base_adjust, std_estimates, Lfull)
 end
 
 
 
-gradient(pl::ProfileLikelihood) = DiffResults.gradient(pl.map.od.config.result)
-hessian(pl::ProfileLikelihood) = DiffResults.hessian(pl.map.od.config.result)
-gradient(map_::MAP) = DiffResults.gradient(map_.od.config.result)
-hessian(map_::MAP) = DiffResults.hessian(map_.od.config.result)
+@inline gradient(ap::AsymptoticPosterior) = ap.map.od.config.result.grad
+@inline hessian(ap::AsymptoticPosterior) = ap.map.od.config.result.hess
+@inline gradient(map_::MAP) = map_.od.config.result.grad
+@inline hessian(map_::MAP) = map_.od.config.result.hess
 
 fit!(map_::MAP) = fit!(map_, map_.buffer)
-function fit!(map_::MAP{P}, initial_x) where P
+function fit!(map_::MAP{P,T}, initial_x) where {P,T}
     setswap!(map_, P)
-    DifferentiableObjects.initial_state!(map_.state, map_.method, map_.od, initial_x)
-    θhat, nlmax = optimize_light(map_.od, initial_x, map_.method, map_.options, map_.state)
-    # @show θhat
-    # @show nlmax
-    map_.nlmax[] = nlmax
-    copyto!(map_.θhat, θhat)
+    # DifferentiableObjects.initial_state!(map_.state, map_.method, map_.od, initial_x)
+    scaled_nlmax, scale = optimize_scale!(map_.state, map_.od, initial_x, map_.method, one(T))
+    map_.nlmax[] = scaled_nlmax / scale
+    θhat = map_.θhat
 
     hessian!(map_.od.config, θhat)
 
     # @show inv(hessian(map_))
     # @show hessian(map_)
-    map_.base_adjust[] = 1 / invdet!(map_.cov, hessian(map_))
+    map_.base_adjust[] = 1 / invcholdet!(map_.Lfull, hessian(map_))
+    # @fastmath @inbounds for i ∈ 1:P
     @inbounds for i ∈ 1:P
-        map_.std_estimates[i] = sqrt(map_.cov[i,i])
+        varᵢ = map_.Lfull[i,i] * map_.Lfull[i,i]
+        @fastmath for j ∈ i+1:P
+            varᵢ += map_.Lfull[j,i] * map_.Lfull[j,i]
+        end
+        map_.std_estimates[i] = sqrt( varᵢ )
     end
 
     # @show abs2.(map_.std_estimates)
     map_
 end
 
-# set_profile_cov(x::SizedSIMDVector{P,T}) where {T,P} = SymmetricMatrix{T,P}()
-# #Skip in the profile update, so we can manually set it to
-# set_profile_cov(x, y) = nothing
-
 function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T}, ::Val{P}) where {F,T,Pm1,P}
 
-    result = DiffResults.GradientResult(x)
-    # result = DiffResults.HessianResult(x)
+    result = DifferentiableObjects.GradientDiffResult(x)
     chunk = DifferentiableObjects.Chunk(Val{Pm1}())
     gconfig = ForwardDiff.GradientConfig(nothing, x, chunk, ForwardDiff.Tag(nothing, T))
     profile = ProfileWrapper{P,F,T,eltype(gconfig)}(f,
         SizedSIMDVector{P,T}(undef),
-        SizedSIMDVector{P,eltype(gconfig)}(),
+        SizedSIMDVector{P,eltype(gconfig)}(undef),
         Ref(P), Ref(zero(T))
     )
-
-    # tag = ForwardDiff.Tag(f, T)
-    # jacobian_config = ForwardDiff.JacobianConfig((f,ForwardDiff.gradient), DiffResults.gradient(result), x, chunk, tag)
-    # gradient_config = ForwardDiff.GradientConfig(f, jacobian_config.duals[2], chunk, tag)
-    # inner_result = DiffResults.GradientResult(jacobian_config.duals[2])
 
     gradconfig = GradientConfiguration(profile, result, gconfig)
 
     OnceDifferentiable(similar(x), similar(x), gradconfig)#, Val{P}())
 end
 
-@generated function ProfileLikelihood(f, map_::MAP, initial_x::SizedSIMDVector{P,T}, LS = LineSearches.BackTracking()) where {T,P}
+@generated function AsymptoticPosterior(f, map_::MAP, initial_x::SizedSIMDVector{P,T}) where {T,P}
     quote
-        nuisance = SizedSIMDVector{$(P-1),$T}()
-        od = ProfileDifferentiable(f, nuisance, Val{$P}())
-        # Optim.LBFGS(linesearch=LineSearches.BackTracking())
 
-        # backtrack = Optim.BFGS(LineSearches.InitialStatic(), LineSearches.HagerZhang(), set_profile_cov, Optim.Flat())
-        backtrack = BFGS( linesearch = LS )#, set_profile_cov, Optim.Flat())
-        # backtrack = LBFGS(10, LineSearches.InitialStatic(), LineSearches.BackTracking(), nothing, (P, x) -> nothing, Optim.Flat(), true)
+        backtrack = DifferentiableObjects.BackTracking2(Val(3))
+        # state = DifferentiableObjects.uninitialized_state(nuisance)
+        state = DifferentiableObjects.BFGSState2(Val{$(P-1)}())
+        od = ProfileDifferentiable(f, state.x_old, Val{$P}())
 
-
-        # options = LightOptions()
-        state = DifferentiableObjects.uninitialized_state(nuisance)
-
-        ProfileLikelihood(od, backtrack, state, map_, nuisance)
+        AsymptoticPosterior(od, backtrack, state, map_, state.x_old, SizedSIMDMatrix{$(P-1),$(P-1),$T}(undef))
     end
 end
-function ProfileLikelihood(od::D, method::M, state::S, map_::MAP_, nuisance::SizedSIMDVector{Pm1,T}) where {P,T,Pm1,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P}}
-    ProfileLikelihood{P,T,Pm1,D,M,S,MAP_}(od, method, state, map_, nuisance, Ref{T}(), Ref{Float64}())#, @view(hessian(map_)[1:P-1,1:P-1]))
+function AsymptoticPosterior(od::D, method::M, state::S, map_::MAP_, nuisance::SV, Lsmall::SM) where {P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T,R},SV <: SizedSIMDVector{Pm1,T},SM <: SizedSIMDMatrix{Pm1,Pm1,T}}
+
+    AsymptoticPosterior{P,T,Pm1,R,D,M,S,MAP_,SV,SM}(od, method, state, map_, nuisance, Ref{T}(), Ref{T}(), Lsmall)#, @view(hessian(map_)[1:P-1,1:P-1]))
 end
 
 #Convenience function does a dynamic dispatch.
@@ -158,340 +113,272 @@ function AsymptoticPosterior(f, initial_x::AbstractArray{T}) where T
     AsymptoticPosterior(f, SizedSIMDVector{length(initial_x),T}(initial_x))
 end
 
-# function AsymptoticPosterior(f::F, initial_x::AbstractArray{T}, ::Val{P}, LS = LineSearches.BackTracking()) where {P,T,F}
-function AsymptoticPosterior(f, initial_x::SizedSIMDVector{P,T}, LS = LineSearches.HagerZhang()) where {P,T}
+function AsymptoticPosterior(f, initial_x::SizedSIMDVector{P,T}) where {P,T}
     map_ = MAP(f, initial_x)
     fit!(map_, initial_x)
-    pl = ProfileLikelihood(f, map_, initial_x, LS)
-
-    options = UnivariateZeroOptions(T,zero(T),1e-7,4eps(T),1e-6)
-    state = UnivariateZeroStateBase(zero(T),zero(T),zero(T),zero(T),0,2,false,false,false,false,"")
-    AsymptoticPosterior(pl, state, options)
+    AsymptoticPosterior(f, map_, initial_x)
 end
-function AsymptoticPosterior(::UndefInitializer, f, initial_x::SizedSIMDVector{P,T}, LS = LineSearches.HagerZhang()) where {P,T}
+function AsymptoticPosterior(::UndefInitializer, f, initial_x::SizedSIMDVector{P,T}) where {P,T}
     map_ = MAP(f, initial_x)
     # fit!(map_, initial_x)
-    pl = ProfileLikelihood(f, map_, initial_x, LS)
-
-    options = UnivariateZeroOptions(T,zero(T),1e-7,4eps(T),1e-6)
-    state = UnivariateZeroStateBase(zero(T),zero(T),zero(T),zero(T),0,2,false,false,false,false,"")
-    AsymptoticPosterior(pl, state, options)
+    AsymptoticPosterior(f, map_, initial_x)
 end
 
-profile_ind(pl::ProfileLikelihood) = pl.od.config.f.i[]
-profile_val(pl::ProfileLikelihood) = pl.od.config.f.v[]
+profile_ind(ap::AsymptoticPosterior) = ap.od.config.f.i[]
+profile_val(ap::AsymptoticPosterior) = ap.od.config.f.v[]
 
 
-"""
-Calculates what the profile expected value would be, given normality.
-That is
-pl.nuisance = pl.map.θhat_2 + Cov_{2,1}*Cov_{1,1}^{-1}*(x - pl.map.θhat_1)
-"""
-function normal_expected_nuisance!(pl::ProfileLikelihood{P}, x, i::Int = profile_ind(pl)) where P
-    @inbounds begin
-        sf = (x - pl.map.θhat[i]) / pl.map.cov[i,i]
-        for j in 1:i-1
-            pl.nuisance[j] = pl.map.θhat[j] + pl.map.cov[j,i] * sf
-        end
-        for j in i+1:P
-            pl.nuisance[j-1] = pl.map.θhat[j] + pl.map.cov[j,i] * sf
-        end
-    end
-    nothing
-end
+# """
+# Calculates what the profile expected value would be, given normality.
+# That is
+# ap.nuisance = ap.map.θhat_2 + Cov_{2,1}*Cov_{1,1}^{-1}*(x - ap.map.θhat_1)
+# """
+# function normal_expected_nuisance!(ap::AsymptoticPosterior{P}, x, i::Int = profile_ind(ap)) where P
+#     @inbounds begin
+#         sf = (x - ap.map.θhat[i]) / ap.map.cov[i,i]
+#         for j in 1:i-1
+#             ap.nuisance[j] = ap.map.θhat[j] + ap.map.cov[j,i] * sf
+#         end
+#         for j in i+1:P
+#             ap.nuisance[j-1] = ap.map.θhat[j] + ap.map.cov[j,i] * sf
+#         end
+#     end
+#     nothing
+# end
 
 """
 Naively assumes indepedence, and just uses the global maximum for the profile maximum.
 This seems like it ought to perform poorly, but in tests it appears more robust.
 """
-function naive_expected_nuisance!(pl::ProfileLikelihood{P}, x, i::Int = profile_ind(pl)) where P
-    @inbounds begin
-        # sf = (x - pl.map.θhat[i]) / pl.map.cov[i,i]
-        for j in 1:i-1
-            pl.nuisance[j] = pl.map.θhat[j]# + pl.map.cov[j,i] * sf
-        end
-        for j in i+1:P
-            pl.nuisance[j-1] = pl.map.θhat[j]# + pl.map.cov[j,i] * sf
-        end
+function naive_expected_nuisance!(ap::AsymptoticPosterior{P}, i::Int = profile_ind(ap)) where P
+    @inbounds for j in 1:i-1
+        ap.nuisance[j] = ap.map.θhat[j]# + ap.map.cov[j,i] * sf
     end
-    nothing
-end
-
-function setinvH!(invH::SymmetricMatrix{T,P}, cov::SymmetricMatrix{T,P}, i::Int) where {T,P}
-    n = size(cov,1)
-    divisor = 10
-    @inbounds begin
-        for j in 1:i-1
-            for k in 1:i-1
-                invH[k,j] = cov[k,j]/divisor
-            end
-            for k in i+1:n
-                invH[k-1,j] = cov[k,j]/divisor
-            end
-        end
-        for j in i+1:n
-            for k in 1:i-1
-                invH[k,j-1] = cov[k,j]/divisor
-            end
-            for k in i+1:n
-                invH[k-1,j-1] = cov[k,j]/divisor
-            end
-        end
+    @inbounds for j in i:P-1
+        ap.nuisance[j] = ap.map.θhat[j+1]# + ap.map.cov[j,i] * sf
     end
 end
 
-function profilepdf(pl::ProfileLikelihood, x, ::Val{reset_search}=Val{true}()) where reset_search
-    i = profile_ind(pl::ProfileLikelihood)
-    # expected_nuisance!(pl, x, i)
-    reset_search && naive_expected_nuisance!(pl, x, i)
-    DifferentiableObjects.initial_state!(pl.state, pl.method, pl.od, pl.nuisance)
+function profilepdf(ap::AsymptoticPosterior{P,T}, ::Val{reset_search_start}=Val{true}()) where {reset_search_start,P,T}
+    i = profile_ind(ap)
+    # expected_nuisance!(ap, x, i)
+    reset_search_start && naive_expected_nuisance!(ap, i)
+    # DifferentiableObjects.initial_state!(ap.state, ap.method, ap.od, ap.nuisance)
     # I'm seeing how just using I as the initial H works out.
-    # setinvH!(pl.state.invH, pl.map.cov, i) # Approximate inverse hessian with hessian at maximum.
-    θhat, nlmax = optimize_light(pl.od, pl.nuisance, pl.method, pl.map.options, pl.state)
-    copyto!(pl.nuisance, θhat)
-    pl.nlmax[] = nlmax
+    # setinvH!(ap.state.invH, ap.map.cov, i) # Approximate inverse hessian with hessian at maximum.
+    scaled_nlmax, scale = optimize_scale!(ap.state, ap.od, ap.nuisance, ap.method, one(T))
+    ap.nlmax[] = scaled_nlmax / scale
+    # copyto!(ap.nuisance, ap.state.x_old)
+    # ap.nlmax[]
 end
-function profilepdf(pl::ProfileLikelihood, x, i, ::Val{reset_search}=Val{true}()) where reset_search
-    set!(pl, x, i)
-    # expected_nuisance!(pl, x, i)
-    reset_search && naive_expected_nuisance!(pl, x, i)
-    DifferentiableObjects.initial_state!(pl.state, pl.method, pl.od, pl.nuisance)
-    # I'm seeing how just using I as the initial H works out.
-    # setinvH!(pl.state.invH, pl.map.cov, i) # Approximate inverse hessian with hessian at maximum.
-    θhat, nlmax = optimize_light(pl.od, pl.nuisance, pl.method, pl.map.options, pl.state)
-    copyto!(pl.nuisance, θhat)
-    pl.nlmax[] = nlmax
+function profilepdf(ap::AsymptoticPosterior{P,T}, x, i, ::Val{reset_search_start}=Val{true}()) where {reset_search_start,P,T}
+    set!(ap, x, i)
+    # expected_nuisance!(ap, x, i)
+    # Reseset the other parameters to the corresponding mode.
+    reset_search_start && naive_expected_nuisance!(ap, i)
+    scaled_nlmax, scale = optimize_scale!(ap.state, ap.od, ap.nuisance, ap.method, one(T))
+    ap.nlmax[] = scaled_nlmax / scale
+    # copyto!(ap.nuisance, ap.state.x_old)
+    # ap.nlmax[]
 end
 
-function (pl::ProfileLikelihood)(theta, i = profile_ind(pl), ::Val{reset_search}=Val{false}()) where reset_search
+function (ap::AsymptoticPosterior)(theta, i = profile_ind(ap))
     debug() && println("")
-    debug() && @show theta, pl.rstar[], i
-    # @assert isnan(theta) == false
-    debug() && @show rstar_p(pl, theta, i) + pl.rstar[]
-    rstar_p(pl, theta, i, Val{reset_search}()) + pl.rstar[]
+    debug() && @show theta, ap.rstar[], i
+    debug() && @assert isnan(theta) == false
+    debug() && @show rstar_p(ap, theta, i) + ap.rstar[]
+    rstar_p(ap, theta, i) + ap.rstar[]
 end
 
 # Positive if x is smaller than mode, negative if bigger
-function rp(pl::ProfileLikelihood, x, i = profile_ind(pl))
-    copysign( sqrt(2(pl.nlmax[]-pl.map.nlmax[])), pl.map.θhat[i] - x)
+function rp(ap::AsymptoticPosterior, x, i = profile_ind(ap))
+    copysign( sqrt(2(ap.nlmax[] - ap.map.nlmax[])), ap.map.θhat[i] - x)
 end
 
-function rstar_p(pl::ProfileLikelihood{P}, theta, i::Int=profile_ind(pl), ::Val{reset_search}=Val{true}()) where {P,reset_search}
+function rstar_p(ap::AsymptoticPosterior{P}, theta, i::Int=profile_ind(ap)) where P
 
-    profilepdf(pl, theta, i, Val{reset_search}())
-    set_buffer_to_profile!(pl, i)
+    profilepdf(ap, theta, i)
+    set_buffer_to_profile!(ap, i)
 
-    # pl.map.buffer[i], pl.map.buffer[P] = pl.map.buffer[P], pl.map.buffer[i]
-    # setswap!(pl, P)
-    # hessian!(pl.map.od.config, pl.map.buffer)
-    # @show hessian(pl)
-    # set_buffer_to_profile!(pl, i)
+    setswap!(ap, i)
+    hessian!(ap.map.od.config, ap.map.buffer)
 
-    setswap!(pl, i)
-    hessian!(pl.map.od.config, pl.map.buffer)
-    # @show hessian(pl)
-    debug() && @show pl.map.buffer
-    debug() && @show hessian(pl)
+    debug() && @show ap.map.buffer
+    debug() && @show hessian(ap)
 
-    r = rp(pl, theta, i)
-    # println("\n\n\nCalling qb:")
-    # @show r
-    # qb_res = qb(pl, theta, i)
-    # @show pl.rstar[]
-    # @show r
-    # @show qb_res
-    # @show r + log(qb_res/r)/r
-    r + log(qb(pl, theta, i)/r)/r
+    r = rp(ap, theta, i)
+    r + log(qb(ap, theta, i)/r)/r
 end
 
-# @inline function fdf_adjrstar_p(ap::AsymptoticPosterior, theta, i::Int=profile_ind(pl),::Val{reset_search}=Val{true}()) where reset_search
-#     fdf_adjrstar_p(ap.pl, theta, i,Val{reset_search}())
-# end
-@generated function fdf_adjrstar_p(pl::ProfileLikelihood{P,T}, theta, p_i::Int=profile_ind(pl),::Val{reset_search}=Val{true}()) where {P,T,reset_search}
-
-    q, qa = TriangularMatrices.create_quote()
-    ind = 0
-    for i ∈ 1:P, j ∈ 1:i
-        ind += 1
-        push!(qa, :( $(Symbol(:hess_, ind)) = hess[$( P*(i-1) + j )]  ))
+sym(a,i) = Symbol(a, :_, i)
+function profile_correction_quote(P, R, ::Type{T}) where T
+    VL = min(P, jBLAS.REGISTER_SIZE ÷ sizeof(T))
+    VLT = VL * sizeof(T)
+    V = SIMD.Vec{VL,T}
+    # q = quote @fastmath @inbounds begin end end
+    # qa = q.args[2].args[3].args[3].args
+    q = quote end
+    qa = q.args
+    iter = P ÷ VL
+    push!(qa, :(ptr_Li = pointer(Li)))
+    push!(qa, :(@inbounds $(sym(:vH,0)) = $V(hess[1]) ))
+    push!(qa, :(@inbounds $(sym(:vG,0)) = $V(grad[1]) ))
+    for r ∈ 0:iter-1 #ps = 0
+        push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT)) ))
+        push!(qa, :($(sym(:vHL,r)) = $(sym(:vH,0))*$(sym(:vL,r)) ))
+        push!(qa, :($(sym(:vGL,r)) = $(sym(:vG,0))*$(sym(:vL,r)) ))
     end
-    TriangularMatrices.extract_linear!(qa, P, :grad)
-    stn = TriangularMatrices.small_triangle(P)
-    @inbounds for i in 1:P-1
-        hᵢₙ = Symbol(:hess_, stn + i) # hessian(pl)[i,end]
-        gᵢ = Symbol(:grad_, i)
-        sti = TriangularMatrices.small_triangle(i)
-        for j in 1:i-1
-            push!(qa, :(prof_factor += $(Symbol(:hess_, sti + j)) *
-                        ( $(Symbol(:grad_, j)) * $hᵢₙ + $gᵢ*$(Symbol(:hess_, stn + j))  ) ) )
-            # prof_factor += pl.subhess[j,i] * (grad[j]*hᵢₙ + gᵢ*hessian(pl)[j,end])
+    itermin = 0
+    for pb ∈ 0:VL:P-2
+        for ps ∈ max(1,pb):min( pb+VL-1, P-2 )
+            push!(qa, :(@inbounds $(sym(:vH,ps)) = $V(hess[$(ps+1)])))
+            push!(qa, :(@inbounds $(sym(:vG,ps)) = $V(grad[$(ps+1)])))
+            for r ∈ itermin:iter-1
+                push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT) + $(sizeof(T)*R*ps))))
+                push!(qa, :($(sym(:vHL,r)) = fma($(sym(:vH,ps)),$(sym(:vL,r)),$(sym(:vHL,r))) ))
+                push!(qa, :($(sym(:vGL,r)) = fma($(sym(:vG,ps)),$(sym(:vL,r)),$(sym(:vGL,r))) ))
+            end
         end
-        push!(qa, :(prof_factor += $(Symbol(:hess_, sti + i)) * $gᵢ * $hᵢₙ ))
-        # prof_factor += pl.subhess[i,i] * gᵢ * hᵢₙ
+        if itermin == 0
+            push!(qa, :(Vout = $(sym(:vHL,itermin)) * $(sym(:vGL,itermin))))
+        else
+            push!(qa, :(Vout = fma($(sym(:vHL,itermin)), $(sym(:vGL,itermin)),Vout)))
+        end
+        itermin += 1
     end
-
-    quote
-        profilepdf(pl, theta, p_i, Val{reset_search}())
-        set_buffer_to_profile!(pl, p_i)
-        setswap!(pl, p_i)
-        hess = hessian!(pl.map.od.config, pl.map.buffer)
-
-        delta_log_likelihood = pl.nlmax[]-pl.map.nlmax[]
-        r = copysign( sqrt(2delta_log_likelihood), pl.map.θhat[p_i] - theta)
-
-        grad = gradient(pl)
-
-        rootdet = invdet!(hessian(pl), Val{$(P-1)}())
-
-        prof_factor = zero(T)
-        $q
-        # @inbounds for i in 1:P-1
-        #     hᵢₙ = hessian(pl)[i,end]
-        #     gᵢ = grad[i]
-        #     for j in 1:i-1
-        #         prof_factor += pl.subhess[j,i] * (grad[j]*hᵢₙ + gᵢ*hessian(pl)[j,end])
-        #     end
-        #     prof_factor += pl.subhess[i,i] * gᵢ * hᵢₙ
-        # end
-        hess_adjust = rootdet * pl.map.base_adjust[]
-        q = (prof_factor - grad[P]) * hess_adjust
-
-        rstar = r + log(q/r)/r
-        rstar + pl.rstar[], exp(abs2(rstar)/2-delta_log_likelihood) / hess_adjust
-    end
+    push!(qa, :(sum(Vout)))
+    q
 end
-function pdf(pl::ProfileLikelihood{P,T,Pm1}, theta, i = profile_ind(pl),::Val{reset_search}=Val{true}()) where {P,T,Pm1,reset_search}
+"""
+Calculates the quadratic form of grad' * Li' * Li * hess[1:end-1,end]
+"""
+@generated function profile_correction(Li::SizedSIMDMatrix{Pm1,Pm1,T,R},
+                        grad::SizedSIMDVector, hess::SizedSIMDMatrix) where {Pm1,T,R}
+    profile_correction_quote(Pm1+1, R, T)
+end
 
-    profilepdf(pl, theta, i, Val{reset_search}())
-    set_buffer_to_profile!(pl, i)
-    setswap!(pl, i)
-    hessian!(pl.map.od.config, pl.map.buffer)
+function fdf_adjrstar_p(ap::AsymptoticPosterior{P,T}, theta, p_i::Int=profile_ind(ap),
+                    ::Val{reset_search_start} = Val{true}()) where {P,T,reset_search_start}
+
+
+    profilepdf(ap, theta, p_i, Val{reset_search_start}())
+    set_buffer_to_profile!(ap, p_i)
+    setswap!(ap, p_i)
+    hess = hessian!(ap.map.od.config, ap.map.buffer)
+
+    delta_log_likelihood = ap.nlmax[]-ap.map.nlmax[]
+    r = copysign( sqrt((T(2))*delta_log_likelihood), ap.map.θhat[p_i] - theta)
+
+    grad = gradient(ap)
+
+    Li = ap.Lsmall
+    rootdet = invcholdet!(Li, hess)
+    # success || return $(T(Inf),T(Inf))
+
+    # prof_factor = $(zero(T))
+    # $q
+    # @inbounds for i in 1:P-1
+    #     hᵢₙ = hessian(ap)[i,end]
+    #     gᵢ = grad[i]
+    #     for j in 1:i-1
+    #         prof_factor += ap.subhess[j,i] * (grad[j]*hᵢₙ + gᵢ*hessian(ap)[j,end])
+    #     end
+    #     prof_factor += ap.subhess[i,i] * gᵢ * hᵢₙ
+    # end
+    prof_factor = profile_correction(Li, grad, hess)
+    hess_adjust = rootdet * ap.map.base_adjust[]
+    @inbounds q = (prof_factor - grad[P]) * hess_adjust
+
+    rstar = r + log(q/r)/r
+    rstar + ap.rstar[], exp(T(0.5)*abs2(rstar)-delta_log_likelihood) / hess_adjust
+end
+function pdf(ap::AsymptoticPosterior{P,T}, theta, i = profile_ind(ap),::Val{reset_search_start}=Val{true}()) where {P,T,Pm1,reset_search_start}
+
+    profilepdf(ap, theta, i, Val{reset_search_start}())
+    set_buffer_to_profile!(ap, i)
+    setswap!(ap, i)
+    hessian!(ap.map.od.config, ap.map.buffer)
 
     # is there a more efficient way of calculating the determinant?
     # skip storing? Implement that...
-    rootdet = choldet!(hessian(pl), Val{Pm1}())
-
-    exp(pl.map.nlmax[]-pl.nlmax[]) / (sqrt(2π) * rootdet * pl.map.base_adjust[])
+    rootdet, success = safecholdet!(hessian(ap), Val{Pm1}())
+    success ? exp(ap.map.nlmax[]-ap.nlmax[]) / (sqrt(2π) * rootdet * ap.map.base_adjust[]) : T(Inf)
 end
 
 
-@generated function qb(pl::ProfileLikelihood{P,T}, theta, pi = profile_ind(pl)) where {P,T}
+function qb(ap::AsymptoticPosterior{P,T}, theta, pi = profile_ind(ap)) where {P,T}
+    grad = gradient(ap)
+    hess = hessian(ap) # P x P
+    Li = ap.Lsmall
+    rootdet = invcholdet!(Li, hess)
+    prof_factor = profile_correction(Li, grad, hess)
 
-    # @show pl.map.θhat[i]
-    # @show theta
-
-    # @show abs2.(pl.map.std_estimates)
-    # @show inv(hessian(pl))
-    # @show inv(hessian(pl))
-    # @show pl.subhess
-
-    # prof_p_g2 = grad' * vcat( inv(hessian(pl)[1:P-1,1:P-1]) * hessian(pl)[1:P-1,end], -1.0  )
-    # prof_2 = grad[1:P-1]' *  inv(hessian(pl)[1:P-1,1:P-1]) * hessian(pl)[1:P-1,end]
-    # @show prof_p_g2
-    # @show prof_2
-    # @show prof_2 - grad[end]
-    # ForwardDiff.gradient(f2, prex_max_dens4_)' * vcat(-inv(BigFloat.(precise_hessian2[1:end-1,1:end-1]))*BigFloat.(precise_hessian2[1:end-1,end]),big(1.0))
-    q, qa = TriangularMatrices.create_quote()
-    ind = 0
-    for i ∈ 1:P-1, j ∈ 1:i
-        ind += 1
-        push!(qa, :( $(Symbol(:hess_,ind)) = hess[ $( P*(i-1)+j ) ] ) )
-    end
-    # TriangularMatrices.extract_linear!(qa, P, :hess, :hess, TriangularMatrices.small_triangle(P))
-    TriangularMatrices.extract_linear!(qa, P, :grad)
-    for i ∈ 1:P-1
-        hᵢₙ = Symbol(:hess_, i)
-        gᵢ = Symbol(:grad_, i)
-        for j ∈ 1:i-1
-            push!(qa, :( prof_factor += hess[$(j+TriangularMatrices.small_triangle(i))] * ($(Symbol(:grad_, j))*$hᵢₙ + $gᵢ*$(Symbol(:hess_, j)) ) ) )
-        end
-        push!(qa, :(prof_factor += hess[$(TriangularMatrices.big_triangle(i))] * $gᵢ * $hᵢₙ))
-    end
-
-    quote
-        grad = gradient(pl)
-        hess = hessian(pl) # P x P
-        rootdet = invdet!(hess, Val{$(P-1)}()) # only leeding P-1 x P-1
-        prof_factor = zero(T)
-        $q
-        # @inbounds for i in 1:P-1
-        #     hᵢₙ = hessian(pl)[i+$(TriangularMatrices.small_triangle(P))]
-        #     gᵢ = grad[i]
-        #     for j in 1:i-1
-        #         prof_factor += pl.subhess[j,i] * (grad[j]*hᵢₙ + gᵢ*hessian(pl)[j,end])
-        #     end
-        #     prof_factor += pl.subhess[i,i] * gᵢ * hᵢₙ
-        # end
-        # @show -prof_factor
-        # @show grad[P]
-        # @show (prof_factor - grad[P])
-        # @show rootdet
-        # @show pl.map.base_adjust[]
-        (prof_factor - $(Symbol(:grad_, P))) * rootdet * pl.map.base_adjust[]
-    end
+    # @inbounds for i in 1:P-1
+    #     hᵢₙ = hessian(ap)[i+$(TriangularMatrices.small_triangle(P))]
+    #     gᵢ = grad[i]
+    #     for j in 1:i-1
+    #         prof_factor += ap.subhess[j,i] * (grad[j]*hᵢₙ + gᵢ*hessian(ap)[j,end])
+    #     end
+    #     prof_factor += ap.subhess[i,i] * gᵢ * hᵢₙ
+    # end
+    # @show -prof_factor
+    # @show grad[P]
+    # @show (prof_factor - grad[P])
+    # @show rootdet
+    # @show ap.map.base_adjust[]
+    @inbounds (prof_factor - grad[P]) * rootdet * ap.map.base_adjust[]
 end
 
-# function set_buffer_to_profile!(pl::ProfileLikelihood{P}, i = profile_ind(pl)) where P
-#     @inbounds begin
-#         for j in 1:i-1
-#             pl.map.buffer[j] = pl.nuisance[j]
-#         end
-#         pl.map.buffer[i] = profile_val(pl)
-#         for j in i+1:P
-#             pl.map.buffer[j] = pl.nuisance[j-1]
-#         end
-#     end
-# end
-function set_buffer_to_profile!(pl::ProfileLikelihood{P}, i = profile_ind(pl)) where P
+function set_buffer_to_profile!(ap::AsymptoticPosterior{P}, i = profile_ind(ap)) where P
     @inbounds begin # start with bounds-check=yes while testing
         for j in 1:i-1
-            pl.map.buffer[j] = pl.nuisance[j]
+            ap.map.buffer[j] = ap.nuisance[j]
         end
         if i != P
-            pl.map.buffer[i] = pl.nuisance[P-1]
+            ap.map.buffer[i] = ap.nuisance[P-1]
             for j in i+1:P-1
-                pl.map.buffer[j] = pl.nuisance[j-1]
+                ap.map.buffer[j] = ap.nuisance[j-1]
             end
         end
-        pl.map.buffer[P] = profile_val(pl)
+        ap.map.buffer[P] = profile_val(ap)
     end
 end
 
-Φ⁻¹(x) = √2*erfinv(2x-1)
+Φ⁻¹(x::T) where T = √T(2)*erfinv(T(2)x-T(1))
 function Statistics.quantile(ap::AsymptoticPosterior, alpha, i)
-    ap.pl.od.config.f.i[] = i
-    ap.pl.rstar[] = Φ⁻¹(alpha)
+    ap.od.config.f.i[] = i
+    ap.rstar[] = Φ⁻¹(alpha)
     # quadratic_search(ap, i)
-    linear_search(ap, profile_ind(ap.pl))
+    linear_search(ap, profile_ind(ap))
 end
 function Statistics.quantile(ap::AsymptoticPosterior, alpha)
-    ap.pl.rstar[] = Φ⁻¹(alpha)
-    linear_search(ap, profile_ind(ap.pl))
-    # quadratic_search(ap, profile_ind(ap.pl))
+    ap.rstar[] = Φ⁻¹(alpha)
+    linear_search(ap, profile_ind(ap))
+    # quadratic_search(ap, profile_ind(ap))
 end
 
 
 export lquantile, qquantile
 function lquantile(ap::AsymptoticPosterior, alpha, i)
-    ap.pl.od.config.f.i[] = i
-    ap.pl.rstar[] = Φ⁻¹(alpha)
+    ap.od.config.f.i[] = i
+    ap.rstar[] = Φ⁻¹(alpha)
     linear_search(ap, i)
 end
 function lquantile(ap::AsymptoticPosterior, alpha)
-    ap.pl.rstar[] = Φ⁻¹(alpha)
-    linear_search(ap, profile_ind(ap.pl))
+    ap.rstar[] = Φ⁻¹(alpha)
+    linear_search(ap, profile_ind(ap))
 end
 
 function qquantile(ap::AsymptoticPosterior, alpha, i)
-    ap.pl.od.config.f.i[] = i
-    ap.pl.rstar[] = Φ⁻¹(alpha)
+    ap.od.config.f.i[] = i
+    ap.rstar[] = Φ⁻¹(alpha)
     quadratic_search(ap, i)
 end
 function qquantile(ap::AsymptoticPosterior, alpha)
-    ap.pl.rstar[] = Φ⁻¹(alpha)
-    quadratic_search(ap, profile_ind(ap.pl))
+    ap.rstar[] = Φ⁻¹(alpha)
+    quadratic_search(ap, profile_ind(ap))
 end
 
 
-(ap::AsymptoticPosterior)(x) = ap.pl.map.od(x)
-mode(ap::AsymptoticPosterior) = ap.pl.map.θhat
+# (ap::AsymptoticPosterior)(x) = ap.map.od(x)
+mode(ap::AsymptoticPosterior) = ap.map.θhat

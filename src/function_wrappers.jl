@@ -1,7 +1,7 @@
 
 
-# Should also use FunctionWrappers.jl once that supports Julia 0.7
-# to avoid excessive recompilation.
+# Probably use FunctionWrappers.jl for interactive mode, to avoid
+# excessive recompilation.
 
 
 struct ProfileWrapper{P,F,T1,T2}#,C<:AbstractArray}
@@ -12,15 +12,15 @@ struct ProfileWrapper{P,F,T1,T2}#,C<:AbstractArray}
     i::Base.RefValue{Int}
     v::Base.RefValue{T1}
 end
-function (pw::ProfileWrapper{P,F,T})(x::SizedSIMDVector{T}) where {P,F,T}
+function (pw::ProfileWrapper{P,F,T})(x::SizedSIMDVector{Pm1,T}) where {P,Pm1,F,T}
     debug() && @show x
     @inbounds begin
         for i in 1:pw.i[]-1
             pw.x[i] = x[i]
         end
         # pw.x[pw.i[]] = pw.v[]
-        for i in pw.i[]+1:P
-            pw.x[i] = x[i-1]
+        for i in pw.i[]:Pm1
+            pw.x[i+1] = x[i]
         end
     end
     debug() && @show pw.x
@@ -34,8 +34,8 @@ function (pw::ProfileWrapper{P,F,T,T2})(y::SizedSIMDVector{Pm1,T2}) where {P,Pm1
             pw.y[i] = y[i]
         end
         # pw.x[pw.i[]] = pw.v[]
-        for i in pw.i[]+1:P
-            pw.y[i] = y[i-1]
+        for i in pw.i[]:Pm1
+            pw.y[i+1] = y[i]
         end
     end
     # @show pw.y
@@ -47,7 +47,7 @@ function set!(pw::ProfileWrapper, v, i::Int)
     pw.i[] = i
     @inbounds pw.x[i] = v
     @inbounds pw.y[i] = v
-    pw
+    nothing
 end
 
 struct Swap{P,F}

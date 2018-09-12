@@ -1,27 +1,32 @@
+@inline check_approx(x, y, rtol, atol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+@inline convergenceλ(x, abstol, reltol) = max(abstol, max(one(real(x)), norm(x)) * reltol)
 
-function no_convergence(xn0, xn1, fxn1, options)
-    λ = convergenceλ(xn1, options)
-    ifelse(norm(fxn1) <= λ || (check_approx(xn1, xn0, options.xreltol, options.xabstol) && norm(fxn1) <= cbrt(λ)), false, true)
+function no_convergence(xn0, xn1, fxn1, abstol, reltol)
+    λ = convergenceλ(xn1, abstol, reltol)
+    (norm(fxn1) <= λ || (check_approx(xn1, xn0, reltol, abstol) && norm(fxn1) <= cbrt(λ))) ? false : true
 end #on ifelse: isn't there going to be a branch anyway when the calling program checks whether this returned true/faslse?
 
-@inline function initial_conditions(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
+@inline function initial_conditions(ap::AsymptoticPosterior, i = profile_ind(ap))
     @inbounds begin
-        fx0 = ap.pl.rstar[]
-        x0 = ap.pl.map.θhat[i]
-        x1 = x0 + fx0 * ap.pl.map.std_estimates[i] # inverse slope
+        fx0 = ap.rstar[]
+        x0 = ap.map.θhat[i]
+        x1 = x0 + fx0 * ap.map.std_estimates[i] # inverse slope
     end
-    fx1, s = fdf_adjrstar_p(ap.pl, x1, i, Val{true}())
+    fx1, s = fdf_adjrstar_p(ap, x1, i, Val{true}())
 
     x0, fx0, x1, fx1, s
 
 end
 
-function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
+function linear_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
     x0, fx0, x1, fx1, s = initial_conditions(ap, i)
-    if norm(fx1) <= convergenceλ(x1, ap.options)
+    abstol, reltol = sqrt(eps(T)), cbrt(eps(T))
+    if norm(fx1) <= convergenceλ(x1, abstol, reltol)
         return x1#, fx1
+    elseif signbit(fx0) != signbit(fx1)
+        return custom_bisection(ap, x1, x0, fx1, fx0, true, cbrt(eps()))
     end
-    
+
     debug_rootsearch() && @show ((x0 - x1) / (fx1 - fx0), 1/s)
     debug_rootsearch() && @show x1 + fx1 / s
     debug_rootsearch() && @show x1 + fx1 * (x0 - x1) / (fx1 - fx0)
@@ -29,31 +34,31 @@ function linear_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
     x1, x0 = x1 + fx1 / s, x1
     debug_rootsearch() && @show x1
 
-    debug_rootsearch() && @show ap.pl.rstar[]
+    debug_rootsearch() && @show ap.rstar[]
     fx0 = fx1
-    fx1, s = fdf_adjrstar_p(ap.pl, x1, i, Val{false}())
-    debug_rootsearch() && @show fx1, ap.pl(x1, i)
-    # fx1, fx0 = ap.pl(x1, i), fx1
+    fx1, s = fdf_adjrstar_p(ap, x1, i, Val{false}())
+    debug_rootsearch() && @show fx1, ap(x1, i)
+    # fx1, fx0 = ap(x1, i), fx1
 
-    not_converged = no_convergence(x0, x1, fx1, ap.options)
+    not_converged = no_convergence(x0, x1, fx1, abstol, reltol)
     # @show not_converged
 
     # Keep using quadratic approximations until either convergence or signs flip.
     while not_converged && signbit(fx0) == signbit(fx1)
         # x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
         x1, x0 = x1 + fx1 / s, x1
-        # fx1, fx0 = ap.pl(x1, i), fx1
+        # fx1, fx0 = ap(x1, i), fx1
         fx0 = fx1
-        fx1, s = fdf_adjrstar_p(ap.pl, x1, i, Val{false}())
+        fx1, s = fdf_adjrstar_p(ap, x1, i, Val{false}())
         debug_rootsearch() && @show (fx1, fx0)
-        not_converged = no_convergence(x0, x1, fx1, ap.options)
+        not_converged = no_convergence(x0, x1, fx1, abstol, reltol)
     end
-    if not_converged # If signs flipped, switch to FalsePosition
-        debug_rootsearch() && @show (x0, fx0, ap.pl(x0, i))
-        debug_rootsearch() && @show (x1, fx1, ap.pl(x1, i))
-        reset_state!(ap.state, x1, x0, fx1, fx0)
-        find_zero!(ap.state, ap.pl, FalsePosition(), ap.options)
-        x1 = ap.state.xn1
+    if not_converged # If signs flipped, switch to Brent
+        debug_rootsearch() && @show (x0, fx0, ap(x0, i))
+        debug_rootsearch() && @show (x1, fx1, ap(x1, i))
+        # reset_state!(ap.state, x1, x0, fx1, fx0)
+        # x1 = ap.state.xn1
+        x1 = custom_bisection(ap, x1, x0, fx1, fx0, true, cbrt(eps()))
         # fx1 = ap.state.fx1
     end
 
@@ -104,10 +109,11 @@ function update(x0, x1, x2, fx0, fx1, fx2)
 end
 
 
-function quadratic_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
+function quadratic_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
     x0, fx0, x1, fx1, s = initial_conditions(ap, i)
 
-    if norm(fx1) <= convergenceλ(x1, ap.options)
+    abstol, reltol = 4eps(T), cbrt(eps(T))
+    if norm(fx1) <= convergenceλ(x1, abstol, reltol)
         return x1#, fx1
     end
 
@@ -129,19 +135,19 @@ function quadratic_search(ap::AsymptoticPosterior, i = profile_ind(ap.pl))
     # else #If there are no solutions to the quadratic problem, we will take a linear step.
         x2 = x1 - fx1 * δx / δf
     # end
-    fx2 = ap.pl(x2, i)
-    not_converged = no_convergence(x1, x2, fx2, ap.options)
+    fx2 = ap(x2, i)
+    not_converged = no_convergence(x1, x2, fx2, abstol, reltol)
 
     # Keep using quadratic approximations until either convergence or signs flip.
     while not_converged && signbit(fx2) == signbit(fx1)
         x0,  x1,  x2  = update(x0, x1, x2, fx0, fx1, fx2)
-        fx0, fx1, fx2 = fx1, fx2, ap.pl(x2, i)
-        not_converged = no_convergence(x1, x2, fx2, ap.options)
+        fx0, fx1, fx2 = fx1, fx2, ap(x2, i)
+        not_converged = no_convergence(x1, x2, fx2, abstol, reltol)
     end
     if not_converged # If signs flipped, switch to FalsePosition
-        reset_state!(ap.state, x2, x1, fx2, fx1)
-        find_zero!(ap.state, ap.pl, FalsePosition(), ap.options)
-        x2 = ap.state.xn1
+        # reset_state!(ap.state, x2, x1, fx2, fx1)
+        # x2 = ap.state.xn1
+        x2 = custom_bisection(ap, x2, x1, fx2, fx1, true, cbrt(eps()))
         # fx2 = ap.state.fx1
     end
 

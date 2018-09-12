@@ -1,5 +1,13 @@
 
 
+# mutable struct TriangularMatrix{T,P,L}
+#     data::NTuple{T,L}
+#     TriangularMatrix{T,P,L}(::UndefInitializer) where {T,P,L} = new()
+#     @generated TriangularMatrix{T,P}(::UndefInitializer) where {T,P} = :(TriangularMatrix{$T,$P,$(binomial(P+1,2))}(undef))
+# end
+
+
+
 # LinearAlgebra.LAPACK.potrf!('U', x) #Only good for LinearAlgebra.BLAS.BlasFloat
 # LinearAlgebra.LAPACK.trtri!('U', 'N', x)
 
@@ -101,7 +109,7 @@ function chol!(A::AbstractMatrix, ::Type{LowerTriangular}, ::Val{N}) where N
             for i = k + 1:N
                 A[i,k] *= AkkInv'
             end
-        end    
+        end
     end
     A
 end
@@ -124,7 +132,7 @@ function choldet!(A::AbstractMatrix{T}, ::Type{LowerTriangular}, ::Val{N}) where
             for i = k + 1:N
                 A[i,k] *= AkkInv'
             end
-        end    
+        end
     end
     out
 end
@@ -225,7 +233,7 @@ end
 """
 Returns:
 (1) the square root of the determinant of the nuisance parameter block of the hessian |j_{λ,λ}|^{1/2}
-(2) 
+(2)
 """
 function profile_hessian!(A::AbstractMatrix{T}, ::Val{N}) where {N,T}
     out = one(T)

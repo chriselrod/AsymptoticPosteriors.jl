@@ -4,11 +4,11 @@ module AsymptoticPosteriors
 
 using   LinearAlgebra, # special functions and LinearAlgebra ought to be clear enough.
         SpecialFunctions,
+        SIMD,
         SIMDArrays,
         jBLAS,
         DifferentiableObjects,
-        Statistics,
-        LineSearches
+        Statistics
 # import  Optim,
         # NLSolversBase,
         # LineSearches,
@@ -28,7 +28,8 @@ debug_rootsearch() = false
 
 include("function_wrappers.jl")
 # include("differentiable_objects.jl")
-include("false_position.jl")
+# include("false_position.jl")
+include("brent.jl")
 include("nested.jl")
 include("initial_root_search.jl")
 # include("linalg.jl")

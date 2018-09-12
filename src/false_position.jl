@@ -155,7 +155,7 @@ function find_zero!(state::UnivariateZeroState, fs::F, method::UnivariateZeroMet
                     state.convergence_failed = true
                 end
             end
-                
+
             if state.x_converged || state.f_converged
                 # options.verbose && show_trace(fs, state, xns, fxns, method)
                 return state#.xn1
@@ -189,7 +189,7 @@ function update_state(method::FalsePosition, fs::F, o, options) where F
     if !(tau < norm(lambda) < 1-tau)
         lambda = 1/2
     end
-    x = b - lambda * (b-a)        
+    x = b - lambda * (b-a)
     fx = fs(x)
     o.fnevals += 1
     o.steps += 1
@@ -208,9 +208,9 @@ function update_state(method::FalsePosition, fs::F, o, options) where F
     b, fb = x, fx
 
     #xn0 are old, xn1 are new.
-    o.xn0, o.xn1 = a, b 
+    o.xn0, o.xn1 = a, b
     o.fxn0, o.fxn1 = fa, fb
-    
+
     nothing
 end
 
@@ -250,7 +250,7 @@ function assess_convergence(state, options)
     xn0, xn1 = state.xn0, state.xn1
     fxn0, fxn1 = state.fxn0, state.fxn1
 
-    
+
     if (state.x_converged || state.f_converged)
         return true
     end
@@ -281,7 +281,7 @@ function assess_convergence(state, options)
     #     # state.message = "NaN produced by algorithm"
     #     return true
     # end
-    
+
     isinf(fxn1) && throw("Inf produced by algorithm")
     # if isinf(fxn1)
     #     state.convergence_failed = true
@@ -316,12 +316,9 @@ function assess_convergence(state, options)
     return false
 end
 
-@inline convergenceλ(x, options) = max(options.abstol, max(one(real(x)), norm(x)) * options.reltol) 
-@inline check_approx(x, y, rtol, atol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+
 # function check_approx(x, y, rtol, atol)
 #     @show norm(x-y)
 #     @show atol + rtol*max(norm(x), norm(y))
 #     norm(x-y) <= atol + rtol*max(norm(x), norm(y))
 # end
-
-

@@ -7,6 +7,8 @@ function custom_bisection(f, cur_a::Number, cur_b::Number, cur_f_a::Number, cur_
   init_a = cur_a
   init_b = cur_b
 
+  # @show cur_a, cur_b
+
   init_f_a = cur_f_a
   init_f_b = cur_f_b
 

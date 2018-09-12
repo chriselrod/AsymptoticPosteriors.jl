@@ -6,22 +6,24 @@ addprocs();
 
 
 @everywhere begin
-using LineSearches, TriangularMatrices, Statistics
+# using LineSearches, TriangularMatrices, Statistics
+using Statistics, SIMDArrays
 using AsymptoticPosteriors, Parameters, Rmath
 using Base.Cartesian, Random, LinearAlgebra
 # using Pkg
 # include(joinpath(dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
 end
 @everywhere begin
-include("/home/chris/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
+# include("/home/chris/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
+include("/home/chriselrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
 # using DifferentiableObjects
 
 const truth = CorrErrors((0.15, 0.4), (0.9, 0.95), (0.85,0.97));
 const data = NoGoldData(truth,160,320,52);
-x = TriangularMatrices.randvec(6);
+x = randnsimd(6);
 end
 @everywhere begin
-@time const ap = AsymptoticPosterior(data, x, LineSearches.HagerZhang());
+@time const ap = AsymptoticPosterior(data, x);
 end
 @everywhere begin
 @time quantile(ap, 0.025)
@@ -45,8 +47,8 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     data = NoGoldData(truth, n_common, n1, n2)
     # resample!(data, truth, n_common, n1, n2)
     ap = AsymptoticPosterior(data, init, LineSearches.HagerZhang())
-    
-    
+
+
     AsymptoticPosteriors.fit!(ap.pl.map, init)
     set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, 1)
     set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, 1)
@@ -116,7 +118,7 @@ function simulation_core(truth, K1,K2,K3, iter, n_common_base = 100, n1_base = 1
     data = NoGoldData(truth)
     # resample!(data, truth, n_common, n1, n2)
     ap = AsymptoticPosterior(undef, data, init, LineSearches.HagerZhang()) #not yet fit on data
-    
+
     for k3 ∈ 1:K3, k2 ∈ 1:K2, k1 ∈ 1:K1
         n_common = round(Int, n_common_base * 2^((k1-1)//8))
         n1 = round(Int, n1_base * 2^((k2-1)//8))
@@ -168,8 +170,8 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     data = NoGoldData(truth, n_common, n1, n2)
     # resample!(data, truth, n_common, n1, n2)
     ap = AsymptoticPosterior(data, init, LineSearches.HagerZhang())
-    
-    
+
+
     AsymptoticPosteriors.fit!(ap.pl.map, init)
     set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, 1)
     set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, 1)
