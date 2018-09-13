@@ -5,11 +5,11 @@ struct MAP{P,T,R,D<:DifferentiableObject{P},M,S,L}
     od::D
     method::M
     state::S
-    θhat::SizedSIMDVector{P,T,R}
-    buffer::SizedSIMDVector{P,T,R}
+    θhat::SizedSIMDVector{P,T,R,R}
+    buffer::SizedSIMDVector{P,T,R,R}
     nlmax::Base.RefValue{T}
     base_adjust::Base.RefValue{T}
-    std_estimates::SizedSIMDVector{P,T,R}
+    std_estimates::SizedSIMDVector{P,T,R,R}
     Lfull::SizedSIMDMatrix{P,P,T,R,L}
 end
 
@@ -75,12 +75,12 @@ function fit!(map_::MAP{P,T}, initial_x) where {P,T}
     map_
 end
 
-function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T}, ::Val{P}) where {F,T,Pm1,P}
+function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T,R,R}, ::Val{P}) where {F,T,Pm1,P,R}
 
     result = DifferentiableObjects.GradientDiffResult(x)
     chunk = DifferentiableObjects.Chunk(Val{Pm1}())
     gconfig = ForwardDiff.GradientConfig(nothing, x, chunk, ForwardDiff.Tag(nothing, T))
-    profile = ProfileWrapper{P,F,T,eltype(gconfig)}(f,
+    profile = ProfileWrapper{P,F,T,eltype(gconfig),R}(f,
         SizedSIMDVector{P,T}(undef),
         SizedSIMDVector{P,eltype(gconfig)}(undef),
         Ref(P), Ref(zero(T))
@@ -232,7 +232,7 @@ function profile_correction_quote(P, R, T)
     V = SIMD.Vec{VL,T}
     # q = quote @fastmath @inbounds begin end end
     # qa = q.args[2].args[3].args[3].args
-    q = quote end
+    q = quote $(Expr(:meta, :inline)) end
     qa = q.args
     iter = R ÷ VL # number of iterations down the columns of the matrix.
     push!(qa, :(ptr_Li = pointer(Li)))
@@ -280,7 +280,7 @@ end
 Calculates the quadratic form of grad' * Li' * Li * hess[1:end-1,end]
 """
 @generated function profile_correction(Li::SizedSIMDMatrix{R,Pm1,T,R},
-                        grad::SizedSIMDVector, hess::SizedSIMDMatrix) where {pad,Pm1,T,R}
+                        grad::SizedSIMDVector, hess::SizedSIMDMatrix) where {Pm1,T,R}
     profile_correction_quote(Pm1+1, R, T)
 end
 
@@ -294,7 +294,7 @@ function fdf_adjrstar_p(ap::AsymptoticPosterior{P,T}, theta, p_i::Int=profile_in
     hess = hessian!(ap.map.od.config, ap.map.buffer)
 
     delta_log_likelihood = ap.nlmax[]-ap.map.nlmax[]
-    r = copysign( sqrt((T(2))*delta_log_likelihood), ap.map.θhat[p_i] - theta)
+    @inbounds r = copysign( sqrt((T(2))*delta_log_likelihood), ap.map.θhat[p_i] - theta)
 
     grad = gradient(ap)
 
@@ -357,18 +357,17 @@ function qb(ap::AsymptoticPosterior{P,T}, theta, pi = profile_ind(ap)) where {P,
 end
 
 function set_buffer_to_profile!(ap::AsymptoticPosterior{P}, i = profile_ind(ap)) where P
-    @inbounds begin # start with bounds-check=yes while testing
-        for j in 1:i-1
-            ap.map.buffer[j] = ap.nuisance[j]
-        end
-        if i != P
-            ap.map.buffer[i] = ap.nuisance[P-1]
-            for j in i+1:P-1
-                ap.map.buffer[j] = ap.nuisance[j-1]
-            end
-        end
-        ap.map.buffer[P] = profile_val(ap)
+    @inbounds for j in 1:i-1
+        ap.map.buffer[j] = ap.nuisance[j]
     end
+    if i != P
+        @inbounds ap.map.buffer[i] = ap.nuisance[P-1]
+        @inbounds for j in i+1:P-1
+            ap.map.buffer[j] = ap.nuisance[j-1]
+        end
+    end
+    ap.map.buffer[P] = profile_val(ap)
+    nothing
 end
 
 Φ⁻¹(x::T) where T = √T(2)*erfinv(T(2)x-T(1))

@@ -4,10 +4,10 @@
 # excessive recompilation.
 
 
-struct ProfileWrapper{P,F,T1,T2}#,C<:AbstractArray}
+struct ProfileWrapper{P,F,T1,T2,R}#,C<:AbstractArray}
     f::F
-    x::SizedSIMDVector{P,T1}
-    y::SizedSIMDVector{P,T2}
+    x::SizedSIMDVector{P,T1,R,R}
+    y::SizedSIMDVector{P,T2,R,R}
     # z::C
     i::Base.RefValue{Int}
     v::Base.RefValue{T1}

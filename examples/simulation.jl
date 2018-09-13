@@ -1,12 +1,11 @@
-using OhMyREPL
+
 using Distributed
 # addprocs(8);
-addprocs();
+addprocs(4);
 # addprocs(16);
 
 
 @everywhere begin
-# using LineSearches, TriangularMatrices, Statistics
 using Statistics, SIMDArrays
 using AsymptoticPosteriors, Parameters, Rmath
 using Base.Cartesian, Random, LinearAlgebra
@@ -15,7 +14,8 @@ using Base.Cartesian, Random, LinearAlgebra
 end
 @everywhere begin
 # include("/home/chris/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
-include("/home/chriselrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
+# include("/home/chriselrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
+include("/home/celrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
 # using DifferentiableObjects
 
 const truth = CorrErrors((0.15, 0.4), (0.9, 0.95), (0.85,0.97));
@@ -28,7 +28,7 @@ end
 @everywhere begin
 @time quantile(ap, 0.025)
 
-# @time apc = AsymptoticPosterior(data, randn(6), Val(6), LineSearches.HagerZhang());
+# @time apc = AsymptoticPosterior(data, randn(6), Val(6));
 summary(ap)
 end
 
@@ -37,7 +37,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     sim_results = Array{Float64}(undef,3,6,k)
     S₁, S₂, C₁, C₂, π₁, π₂ = truth.S[1], truth.S[2], truth.C[1], truth.C[2], truth.π[1], truth.π[2]
 
-    init = RecursiveVector{Float64,6}()
+    init = SizedSIMDVector{6,Float64}(undef)
     for i ∈ 1:4
         init[i] = truth.Θ[i]
     end
@@ -46,10 +46,10 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     end
     data = NoGoldData(truth, n_common, n1, n2)
     # resample!(data, truth, n_common, n1, n2)
-    ap = AsymptoticPosterior(data, init, LineSearches.HagerZhang())
+    ap = AsymptoticPosterior(data, init)
 
 
-    AsymptoticPosteriors.fit!(ap.pl.map, init)
+    AsymptoticPosteriors.fit!(ap.map, init)
     set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, 1)
     set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, 1)
     set_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, 1)
@@ -58,7 +58,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     set_buffer!(sim_results, inv_logit,       π₂, ap, 6, 1)
     @inbounds for j ∈ 2:iter
         resample!(data, truth, n_common, n1, n2)
-        AsymptoticPosteriors.fit!(ap.pl.map, init)
+        AsymptoticPosteriors.fit!(ap.map, init)
         update_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, 1)
         update_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, 1)
         update_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, 1)
@@ -71,7 +71,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
         n1 *= 2
         n2 *= 2
         resample!(data, truth, n_common, n1, n2)
-        AsymptoticPosteriors.fit!(ap.pl.map, init)
+        AsymptoticPosteriors.fit!(ap.map, init)
         set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, i)
         set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, i)
         set_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, i)
@@ -80,7 +80,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
         set_buffer!(sim_results, inv_logit,       π₂, ap, 6, i)
         @inbounds for j ∈ 2:iter
             resample!(data, truth, n_common, n1, n2)
-            AsymptoticPosteriors.fit!(ap.pl.map, init)
+            AsymptoticPosteriors.fit!(ap.map, init)
             update_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, i)
             update_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, i)
             update_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, i)
@@ -95,7 +95,7 @@ function simulation_core(truth, K1,K2,K3, iter, n_common_base = 100, n1_base = 1
     sim_results = Array{Float64}(undef,3,6,K1,K2,K3)
     S₁, S₂, C₁, C₂, π₁, π₂ = truth.S[1], truth.S[2], truth.C[1], truth.C[2], truth.π[1], truth.π[2]
 
-    init = RecursiveVector{Float64,6}()
+    init = SizedSIMDVector{6,Float64}(undef)
     for i ∈ 1:4 # Set truth as initial guess.
         init[i] = truth.Θ[i]
     end
@@ -117,7 +117,7 @@ function simulation_core(truth, K1,K2,K3, iter, n_common_base = 100, n1_base = 1
     # )
     data = NoGoldData(truth)
     # resample!(data, truth, n_common, n1, n2)
-    ap = AsymptoticPosterior(undef, data, init, LineSearches.HagerZhang()) #not yet fit on data
+    ap = AsymptoticPosterior(undef, data, init) #not yet fit on data
 
     for k3 ∈ 1:K3, k2 ∈ 1:K2, k1 ∈ 1:K1
         n_common = round(Int, n_common_base * 2^((k1-1)//8))
@@ -125,7 +125,7 @@ function simulation_core(truth, K1,K2,K3, iter, n_common_base = 100, n1_base = 1
         n2 = round(Int, n2_base * 2^((k3-1)//8))
         resample!(data, truth, n_common, n1, n2)
         # try
-            AsymptoticPosteriors.fit!(ap.pl.map, init)
+            AsymptoticPosteriors.fit!(ap.map, init)
             set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, k1,k2,k3)
             set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, k1,k2,k3)
             set_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, k1,k2,k3)
@@ -140,7 +140,7 @@ function simulation_core(truth, K1,K2,K3, iter, n_common_base = 100, n1_base = 1
         @inbounds for j ∈ 2:iter
             resample!(data, truth, n_common, n1, n2)
             # try
-                AsymptoticPosteriors.fit!(ap.pl.map, init)
+                AsymptoticPosteriors.fit!(ap.map, init)
                 update_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, k1,k2,k3)
                 update_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, k1,k2,k3)
                 update_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, k1,k2,k3)
@@ -160,7 +160,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     sim_results = Array{Float64}(undef,3,6,k)
     S₁, S₂, C₁, C₂, π₁, π₂ = truth.S[1], truth.S[2], truth.C[1], truth.C[2], truth.π[1], truth.π[2]
 
-    init = RecursiveVector{Float64,6}()
+    init = SizedSIMDVector{6,Float64}(undef)
     for i ∈ 1:4
         init[i] = truth.Θ[i]
     end
@@ -169,10 +169,10 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     end
     data = NoGoldData(truth, n_common, n1, n2)
     # resample!(data, truth, n_common, n1, n2)
-    ap = AsymptoticPosterior(data, init, LineSearches.HagerZhang())
+    ap = AsymptoticPosterior(data, init)
 
 
-    AsymptoticPosteriors.fit!(ap.pl.map, init)
+    AsymptoticPosteriors.fit!(ap.map, init)
     set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, 1)
     set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, 1)
     set_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, 1)
@@ -181,7 +181,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
     set_buffer!(sim_results, inv_logit,       π₂, ap, 6, 1)
     @inbounds for j ∈ 2:iter
         resample!(data, truth, n_common, n1, n2)
-        AsymptoticPosteriors.fit!(ap.pl.map, init)
+        AsymptoticPosteriors.fit!(ap.map, init)
         update_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, 1)
         update_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, 1)
         update_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, 1)
@@ -194,7 +194,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
         n1 *= 2
         n2 *= 2
         resample!(data, truth, n_common, n1, n2)
-        AsymptoticPosteriors.fit!(ap.pl.map, init)
+        AsymptoticPosteriors.fit!(ap.map, init)
         set_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, i)
         set_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, i)
         set_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, i)
@@ -203,7 +203,7 @@ function simulation_core(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
         set_buffer!(sim_results, inv_logit,       π₂, ap, 6, i)
         @inbounds for j ∈ 2:iter
             resample!(data, truth, n_common, n1, n2)
-            AsymptoticPosteriors.fit!(ap.pl.map, init)
+            AsymptoticPosteriors.fit!(ap.map, init)
             update_buffer!(sim_results, inv_uhalf_logit, S₁, ap, 1, i)
             update_buffer!(sim_results, inv_uhalf_logit, S₂, ap, 2, i)
             update_buffer!(sim_results, inv_uhalf_logit, C₁, ap, 3, i)
@@ -218,18 +218,18 @@ end
 function update_buffer!(buffer::AbstractArray{T}, f, true_val, ap, j, k...) where T
     l = f(quantile(ap, 0.025, j))
     u = f(quantile(ap, 0.975, j))
-    if (l > true_val) | (u < true_val)
+    if (l < true_val) && (u > true_val)
         buffer[1,j,k...] += one(T)
     end
     buffer[2,j,k...] += u - l
-    buffer[3,j,k...] += abs(true_val- f(ap.pl.map.θhat[j]))
+    buffer[3,j,k...] += abs(true_val- f(ap.map.θhat[j]))
 end
 function set_buffer!(buffer::AbstractArray{T}, f, true_val, ap, j, k...) where T
     l = f(quantile(ap, 0.025, j))
     u = f(quantile(ap, 0.975, j))
-    buffer[1,j,k...] = ifelse((l > true_val) | (u < true_val), one(T), zero(T)) # need to set it to zero.
+    buffer[1,j,k...] = ifelse((l < true_val) && (u > true_val), one(T), zero(T)) # need to set it to zero.
     buffer[2,j,k...] = u - l
-    buffer[3,j,k...] = abs(true_val- f(ap.pl.map.θhat[j]))
+    buffer[3,j,k...] = abs(true_val- f(ap.map.θhat[j]))
 end
 
 @inline inv_uhalf_logit(x) = 0.5+0.5/(1+exp(-x ))
@@ -270,7 +270,7 @@ function average_loss(costs, iter, n_common, n1, n2)
     sim_results = Array{Float64}(undef,length(increments))
     S₁, S₂, C₁, C₂, π₁, π₂ = truth.S[1], truth.S[2], truth.C[1], truth.C[2], truth.π[1], truth.π[2]
 
-    init = RecursiveVector{Float64,6}()
+    init = SizedSIMDVector{6,Float64}(undef)
     for i ∈ 1:4
         init[i] = truth.Θ[i]
     end
@@ -287,7 +287,7 @@ function average_loss(costs, iter, n_common, n1, n2)
         sim_results[i] = increment_cost(costs, i)*iter
         @inbounds for k ∈ 1:iter
             resample!(data, truth, nctemp, n1temp, n2temp)
-            AsymptoticPosteriors.fit!(ap.pl.map, init)
+            AsymptoticPosteriors.fit!(ap.map, init)
             sim_results[i] += loss(ap, init)
         end
     end
@@ -308,7 +308,7 @@ end
 
 end #everywhere
 
-function run_simulation(truth, k = 5, iter = 25, n_common = 100, n1 = 1000, n2 = 30)
+function run_simulation(truth, k = 5, iter = 25, n_common = 200, n1 = 100, n2 = 30)
     @distributed (+) for i ∈ 2:nprocs()
         simulation_core(truth, k, iter, n_common, n1, n2)
     end
@@ -322,7 +322,7 @@ end
 
 # @time @everywhere begin
 # const data = NoGoldData(truth)
-# const ap = AsymptoticPosterior(undef, data, x, LineSearches.HagerZhang())
+# const ap = AsymptoticPosterior(undef, data, x)
 # end #everywhere
 
 function simulation_search( costs, num_iter, n_common = (100,100), n1 = (200,200), n2 = (30,30) )
