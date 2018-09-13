@@ -13,7 +13,7 @@ struct MAP{P,T,R,D<:DifferentiableObject{P},M,S,L}
     Lfull::SizedSIMDMatrix{P,P,T,R,L}
 end
 
-struct AsymptoticPosterior{P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T,R},SV <: SizedSIMDVector{Pm1,T},SM <: SizedSIMDMatrix{Pm1,Pm1,T}}
+struct AsymptoticPosterior{P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T,R},SV <: SizedSIMDVector{Pm1,T},R2,SM <: SizedSIMDMatrix{R2,Pm1,T}}
     od::D
     method::M
     state::S
@@ -22,7 +22,6 @@ struct AsymptoticPosterior{P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MA
     nlmax::Base.RefValue{T}
     rstar::Base.RefValue{T}
     Lsmall::SM
-    # subhess::SubArray{T,2,Array{T,2},Tuple{UnitRange{Int64},UnitRange{Int64}},false}
 end
 @inline set!(ap::AsymptoticPosterior, v, i) = set!(ap.od.config.f, v, i)
 @inline setswap!(map_::MAP, i) = map_.od.config.f.i[] = i
@@ -92,6 +91,12 @@ function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T}, ::Val{P}) where 
     OnceDifferentiable(similar(x), similar(x), gradconfig)#, Val{P}())
 end
 
+
+@generated function PrePaddedMatrix(::Val{M}, ::Val{N}, T) where {M,N}
+    R, L = SIMDArrays.calculate_L_from_size((M,N), T)
+    :(zero(SizedSIMDMatrix{$R,$N,$T}(undef))) # we want offset
+end
+
 @generated function AsymptoticPosterior(f, map_::MAP, initial_x::SizedSIMDVector{P,T}) where {T,P}
     quote
 
@@ -100,15 +105,18 @@ end
         state = DifferentiableObjects.BFGSState2(Val{$(P-1)}())
         od = ProfileDifferentiable(f, state.x_old, Val{$P}())
 
-        AsymptoticPosterior(od, backtrack, state, map_, state.x_old, SizedSIMDMatrix{$(P-1),$(P-1),$T}(undef))
+        Lsmall = PrePaddedMatrix(Val{$(P-1)}(),Val{$(P-1)}(),$T)
+
+        AsymptoticPosterior(od, backtrack, state, map_, state.x_old, Lsmall)
     end
 end
-function AsymptoticPosterior(od::D, method::M, state::S, map_::MAP_, nuisance::SV, Lsmall::SM) where {P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T,R},SV <: SizedSIMDVector{Pm1,T},SM <: SizedSIMDMatrix{Pm1,Pm1,T}}
+function AsymptoticPosterior(od::D, method::M, state::S, map_::MAP_, nuisance::SV, Lsmall::SM) where {P,T,Pm1,R,D<:DifferentiableObject{Pm1},M,S,MAP_ <: MAP{P,T,R},SV <: SizedSIMDVector{Pm1,T},R2,SM <: SizedSIMDMatrix{R2,Pm1,T}}
 
-    AsymptoticPosterior{P,T,Pm1,R,D,M,S,MAP_,SV,SM}(od, method, state, map_, nuisance, Ref{T}(), Ref{T}(), Lsmall)#, @view(hessian(map_)[1:P-1,1:P-1]))
+    AsymptoticPosterior{P,T,Pm1,R,D,M,S,MAP_,SV,R2,SM}(od, method, state, map_, nuisance, Ref{T}(), Ref{T}(), Lsmall)#, @view(hessian(map_)[1:P-1,1:P-1]))
 end
 
-#Convenience function does a dynamic dispatch.
+# Convenience function does a dynamic dispatch if we don't start with a SizedSIMDVector
+# If we have a static arrays dependency, we may also support static dispatches with that?
 function AsymptoticPosterior(f, initial_x::AbstractArray{T}) where T
     AsymptoticPosterior(f, SizedSIMDVector{length(initial_x),T}(initial_x))
 end
@@ -211,7 +219,9 @@ function rstar_p(ap::AsymptoticPosterior{P}, theta, i::Int=profile_ind(ap)) wher
 end
 
 sym(a,i) = Symbol(a, :_, i)
-function profile_correction_quote(P, R, T)
+function profile_correction_quote(P, R, prepad, T)
+    pad = R - P + 1
+
     VL = min(P, jBLAS.REGISTER_SIZE ÷ sizeof(T))
     VLT = VL * sizeof(T)
     V = SIMD.Vec{VL,T}
@@ -256,8 +266,8 @@ end
 """
 Calculates the quadratic form of grad' * Li' * Li * hess[1:end-1,end]
 """
-@generated function profile_correction(Li::SizedSIMDMatrix{Pm1,Pm1,T,R},
-                        grad::SizedSIMDVector, hess::SizedSIMDMatrix) where {Pm1,T,R}
+@generated function profile_correction(Li::SizedSIMDMatrix{R,Pm1,T,R},
+                        grad::SizedSIMDVector, hess::SizedSIMDMatrix) where {pad,Pm1,T,R}
     profile_correction_quote(Pm1+1, R, T)
 end
 
