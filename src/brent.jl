@@ -1,9 +1,12 @@
 ### Credit to djsegal
 ### https://discourse.julialang.org/t/is-there-a-faster-bisection-root-solver-that-uses-atol/12658/21
 
+# f, cur_a, cur_b, cur_f_a, cur_f_b  = ap, x1, x0, fx1, fx0;
+# cur_flag, abstol = true, cbrt(eps())
+# cur_c, cur_f_c, cur_d, cur_f_d, bad_streak = NaN,NaN,NaN,NaN,0
 
 using Statistics
-function custom_bisection(f, cur_a::Number, cur_b::Number, cur_f_a::Number, cur_f_b::Number, cur_flag::Bool=true, abstol::Number=sqrt(eps()), cur_c::Number=NaN, cur_f_c::Number=NaN, cur_d::Number=NaN, cur_f_d::Number=NaN, bad_streak::Number=0)
+function custom_bisection(f, cur_a::Number, cur_b::Number, cur_f_a::Number, cur_f_b::Number, cur_flag::Bool=true, abstol::Number=sqrt(eps(max(cur_a,cur_b))), cur_c::Number=NaN, cur_f_c::Number=NaN, cur_d::Number=NaN, cur_f_d::Number=NaN, bad_streak::Number=0)
   init_a = cur_a
   init_b = cur_b
 
@@ -26,19 +29,19 @@ function custom_bisection(f, cur_a::Number, cur_b::Number, cur_f_a::Number, cur_
   isapprox(cur_f_d, 0.0, atol=abstol) && return cur_d
 
   isapprox(cur_f_a, cur_f_b, atol=abstol) && return NaN
-  isapprox(cur_a, cur_b, atol=2*eps()) && return NaN
+  isapprox(cur_a, cur_b, atol=abstol) && return cur_c
 
-  is_bad_a = isinf(cur_f_a) || isnan(cur_f_a)
-  is_bad_b = isinf(cur_f_b) || isnan(cur_f_b)
-  is_bad_c = isinf(cur_f_c) || isnan(cur_f_c)
-  is_bad_d = isinf(cur_f_d) || isnan(cur_f_d)
+  is_good_a = isfinite(cur_f_a)
+  is_good_b = isfinite(cur_f_b)
+  is_good_c = isfinite(cur_f_c)
+  is_good_d = isfinite(cur_f_d)
 
-  ( !is_bad_a && !is_bad_b && cur_f_a * cur_f_b > 0 ) && return NaN
+  ( is_good_a && is_good_b && cur_f_a * cur_f_b > 0 ) && return NaN
 
-  ( is_bad_a && is_bad_b ) && return NaN
+  ( is_good_a || is_good_b ) || return NaN
 
-  if is_bad_a || is_bad_b || is_bad_c
-    if !is_bad_d && ( isapprox(cur_c, cur_a, atol=abstol) || isapprox(cur_c, cur_b, atol=abstol) )
+  if !(is_good_a && is_good_b && is_good_c)
+    if is_good_d && ( isapprox(cur_c, cur_a, atol=abstol) || isapprox(cur_c, cur_b, atol=abstol) )
       cur_g = cur_d
       cur_f_g = cur_f_d
     else
@@ -57,7 +60,7 @@ function custom_bisection(f, cur_a::Number, cur_b::Number, cur_f_a::Number, cur_
     #     ( cur_root = custom_bisection(f, cur_g, cur_b, cur_f_c, cur_f_b, abstol=abstol) )
     #   return cur_root
     # end
-    if is_bad_a
+    if is_good_a
       cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, cur_flag, abstol)
       isnan(cur_root) &&
         ( cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, cur_flag, abstol) )
@@ -100,7 +103,7 @@ function custom_bisection(f, cur_a::Number, cur_b::Number, cur_f_a::Number, cur_
     cur_diff = abs( cur_d - cur_c )
   end
 
-  cur_bool |= abs( cur_s - cur_b ) >= ( cur_diff / 2 )
+  cur_bool |= abs( cur_s - cur_b ) >= ( cur_diff * typeof(cur_diff)(0.5) )
   cur_bool |= isapprox(cur_diff, 0.0, atol=abstol)
 
   cur_flag = cur_bool

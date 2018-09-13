@@ -32,7 +32,7 @@ function MAP(f, initial_x::SizedSIMDVector{P,T}) where {T,P}
     od = TwiceDifferentiable(Swap(f, Val{P}()), Val{P}())
 
     state = DifferentiableObjects.BFGSState2(Val(P))
-    backtrack = DifferentiableObjects.BackTracking2(Val(3))
+    backtrack = DifferentiableObjects.BackTracking2(Val(2))#order 2 backtrack
 
     Lfull = zero(SizedSIMDMatrix{P,P,T})
 
@@ -92,15 +92,15 @@ function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T}, ::Val{P}) where 
 end
 
 
-@generated function PrePaddedMatrix(::Val{M}, ::Val{N}, T) where {M,N}
+@generated function PrePaddedMatrix(::Val{M}, ::Val{N}, ::Type{T}) where {M,N,T}
     R, L = SIMDArrays.calculate_L_from_size((M,N), T)
-    :(zero(SizedSIMDMatrix{$R,$N,$T}(undef))) # we want offset
+    :(zero(SizedSIMDMatrix{$R,$N,$T})) # we want offset
 end
 
 @generated function AsymptoticPosterior(f, map_::MAP, initial_x::SizedSIMDVector{P,T}) where {T,P}
     quote
 
-        backtrack = DifferentiableObjects.BackTracking2(Val(3))
+        backtrack = DifferentiableObjects.BackTracking2(Val(2)) # order 2 backtrack vs 3
         # state = DifferentiableObjects.uninitialized_state(nuisance)
         state = DifferentiableObjects.BFGSState2(Val{$(P-1)}())
         od = ProfileDifferentiable(f, state.x_old, Val{$P}())
@@ -219,10 +219,15 @@ function rstar_p(ap::AsymptoticPosterior{P}, theta, i::Int=profile_ind(ap)) wher
 end
 
 sym(a,i) = Symbol(a, :_, i)
-function profile_correction_quote(P, R, prepad, T)
+"""
+Generates quote for vectorized multiplication of
+    (L * g)' * (L * h)
+
+"""
+function profile_correction_quote(P, R, T)
     pad = R - P + 1
 
-    VL = min(P, jBLAS.REGISTER_SIZE ÷ sizeof(T))
+    VL = min(R, jBLAS.REGISTER_SIZE ÷ sizeof(T))
     VLT = VL * sizeof(T)
     V = SIMD.Vec{VL,T}
     # q = quote @fastmath @inbounds begin end end
@@ -235,16 +240,28 @@ function profile_correction_quote(P, R, prepad, T)
     push!(qa, :(@inbounds $(sym(:vG,0)) = $V(grad[1]) ))
     # r = 0
     push!(qa, :($(sym(:vL,0)) = vload($V, ptr_Li) ))
-    push!(qa, :($(sym(:vHL,0)) = $(sym(:vH,0))*$(sym(:vL,r)) ))
-    push!(qa, :($(sym(:vGL,0)) = $(sym(:vG,0))*$(sym(:vL,r)) ))
+    push!(qa, :($(sym(:vHL,0)) = $(sym(:vH,0))*$(sym(:vL,0)) ))
+    push!(qa, :($(sym(:vGL,0)) = $(sym(:vG,0))*$(sym(:vL,0)) ))
     for r ∈ 1:iter-1 #ps = 0
         push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT)) ))
         push!(qa, :($(sym(:vHL,r)) = $(sym(:vH,0))*$(sym(:vL,r)) ))
         push!(qa, :($(sym(:vGL,r)) = $(sym(:vG,0))*$(sym(:vL,r)) ))
     end
-    itermin = 0
-    for pb ∈ 0:VL:P-2
-        for ps ∈ max(1,pb):min( pb+VL-1, P-2 )
+    for ps ∈ 1:VL-pad-1
+        push!(qa, :(@inbounds $(sym(:vH,ps)) = $V(hess[$(ps+1),$P])))
+        push!(qa, :(@inbounds $(sym(:vG,ps)) = $V(grad[$(ps+1)])))
+        for r ∈ 0:iter-1
+            push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT + sizeof(T)*R*ps))))
+            push!(qa, :($(sym(:vHL,r)) = fma($(sym(:vH,ps)),$(sym(:vL,r)),$(sym(:vHL,r))) ))
+            push!(qa, :($(sym(:vGL,r)) = fma($(sym(:vG,ps)),$(sym(:vL,r)),$(sym(:vGL,r))) ))
+        end
+    end
+    push!(qa, :(Vout = $(sym(:vHL,0)) * $(sym(:vGL,0))))
+    itermin = 1
+    # for pb ∈ 0:VL:P-2
+    #     for ps ∈ max(1,pb):min( pb+VL-1, P-2 )
+    for pb ∈ VL-pad:VL:P-2
+        for ps ∈ pb:min( pb+VL-1, P-2 )
             push!(qa, :(@inbounds $(sym(:vH,ps)) = $V(hess[$(ps+1),$P])))
             push!(qa, :(@inbounds $(sym(:vG,ps)) = $V(grad[$(ps+1)])))
             for r ∈ itermin:iter-1
@@ -253,11 +270,7 @@ function profile_correction_quote(P, R, prepad, T)
                 push!(qa, :($(sym(:vGL,r)) = fma($(sym(:vG,ps)),$(sym(:vL,r)),$(sym(:vGL,r))) ))
             end
         end
-        if itermin == 0
-            push!(qa, :(Vout = $(sym(:vHL,itermin)) * $(sym(:vGL,itermin))))
-        else
-            push!(qa, :(Vout = fma($(sym(:vHL,itermin)), $(sym(:vGL,itermin)),Vout)))
-        end
+        push!(qa, :(Vout = fma($(sym(:vHL,itermin)), $(sym(:vGL,itermin)),Vout)))
         itermin += 1
     end
     push!(qa, :(sum(Vout)))
