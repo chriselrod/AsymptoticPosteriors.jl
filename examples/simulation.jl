@@ -48,7 +48,7 @@ function set_up_sim(truth, n_common=100, n1=1000, n2=30)
     ap = AsymptoticPosterior(undef, data, init)
     data, ap, init
 end
-function simulation(truth, k, iter, n_common = 100, n1 = 1000, n2 = 30)
+function simulation(truth, k, iter, n_common, n1, n2)
     data, ap, init = set_up_sim(truth, n_common, n1, n2)
     simulation_core!(data, ap, init, truth, k, iter, n_common, n1, n2)
 end
@@ -99,12 +99,12 @@ function simulation_core!(data, ap, init, truth, k, iter, n_common = 100, n1 = 1
     end
     sim_results
 end
-function simulation(truth, K1,K2,K3, iter, n_common = 100, n1 = 1000, n2 = 30)
+function simulation(truth, K1,K2,K3, iter, n_common, n1, n2)
     data, ap, init, sim_results = set_up_sim(truth, n_common, n1, n2)
     simulation_core!(data, ap, init, sim_results, truth, K1,K2,K3, iter, n_common, n1, n2)
 end
 
-function simulation_core!(data, ap, init, truth, K1,K2,K3, iter, n_common_base = 100, n1_base = 1000, n2_base = 30)
+function simulation_core!(data, ap, init, truth, K1,K2,K3, iter, n_common_base, n1_base, n2_base)
 
     sim_results = Array{Float64}(undef,3,6,K1,K2,K3)
     S₁, S₂, C₁, C₂, π₁, π₂ = truth.S[1], truth.S[2], truth.C[1], truth.C[2], truth.π[1], truth.π[2]

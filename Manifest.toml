@@ -64,7 +64,7 @@ uuid = "b552c78f-8df3-52c6-915a-8e097449b14b"
 version = "0.0.7"
 
 [[DifferentiableObjects]]
-deps = ["DiffResults", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "SIMDArrays", "StaticArrays", "jBLAS"]
+deps = ["DiffResults", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "SIMD", "SIMDArrays", "StaticArrays", "jBLAS"]
 path = "/home/chriselrod/.julia/dev/DifferentiableObjects"
 uuid = "e829a12a-7dbf-11e8-18a8-f94f525a9d85"
 version = "0.1.0"
