@@ -1,13 +1,14 @@
-@inline check_approx(x, y, rtol, atol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+@inline check_approx(x, y, atol, rtol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
+@inline check_approx(x, y, atol) = norm(x-y) <= atol
 @inline convergenceλ(x, abstol, reltol) = max(abstol, max(one(real(x)), norm(x)) * reltol)
 
 function no_convergence(xn0, xn1, fxn1, abstol, reltol)
     λ = convergenceλ(xn1, abstol, reltol)
-    (norm(fxn1) <= λ || (check_approx(xn1, xn0, reltol, abstol) && norm(fxn1) <= cbrt(λ))) ? false : true
+    (norm(fxn1) <= λ || (check_approx(xn1, xn0, abstol, reltol) && norm(fxn1) <= cbrt(λ))) ? false : true
 end #on ifelse: isn't there going to be a branch anyway when the calling program checks whether this returned true/faslse?
 function convergence(xn0, xn1, fxn1, abstol, reltol)
     λ = convergenceλ(xn1, abstol, reltol)
-    (norm(fxn1) <= λ || (check_approx(xn1, xn0, reltol, abstol) && norm(fxn1) <= cbrt(λ))) ? true : false
+    (norm(fxn1) <= λ || (check_approx(xn1, xn0, abstol, reltol) && norm(fxn1) <= cbrt(λ))) ? true : false
 end #on ifelse: isn't there going to be a branch anyway when the calling program checks whether this returned true/faslse?
 
 
@@ -25,7 +26,7 @@ end
 
 function linear_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
     x0, fx0, x1, fx1, s = initial_conditions(ap, i)
-    ϵ = eps(max(x0,x1))
+    ϵ = eps(max(abs(x0),abs(x1)))
     abstol, reltol = √ϵ, ∛ϵ
     # if norm(fx1) <= convergenceλ(x1, abstol, reltol)
     #     return x1#, fx1
@@ -65,7 +66,7 @@ function linear_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where 
         debug_rootsearch() && @show (x1, fx1, ap(x1, i))
         # reset_state!(ap.state, x1, x0, fx1, fx0)
         # x1 = ap.state.xn1
-        x1 = custom_bisection(ap, x1, x0, fx1, fx0, true, cbrt(eps()))
+        x1 = custom_bisection(ap, x1, x0, fx1, fx0, abstol)
         # fx1 = ap.state.fx1
     end
 
