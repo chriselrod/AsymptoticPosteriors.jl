@@ -1,5 +1,3 @@
-@inline check_approx(x, y, atol, rtol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
-@inline check_approx(x, y, atol) = norm(x-y) <= atol
 @inline convergenceλ(x, abstol, reltol) = max(abstol, max(one(real(x)), norm(x)) * reltol)
 
 function no_convergence(xn0, xn1, fxn1, abstol, reltol)

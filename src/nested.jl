@@ -80,7 +80,7 @@ function ProfileDifferentiable(f::F, x::SizedSIMDVector{Pm1,T,R,R}, ::Val{P}) wh
     result = DifferentiableObjects.GradientDiffResult(x)
     chunk = DifferentiableObjects.Chunk(Val{Pm1}())
     gconfig = ForwardDiff.GradientConfig(nothing, x, chunk, ForwardDiff.Tag(nothing, T))
-    profile = ProfileWrapper{P,F,T,eltype(gconfig),R}(f,
+    profile = ProfileWrapper(f,
         SizedSIMDVector{P,T}(undef),
         SizedSIMDVector{P,eltype(gconfig)}(undef),
         Ref(P), Ref(zero(T))

@@ -5,11 +5,8 @@
 # cur_flag, abstol = true, cbrt(eps())
 # cur_c, cur_f_c, cur_d, cur_f_d, bad_streak = NaN,NaN,NaN,NaN,0
 
-using LinearAlgebra
 @inline check_approx(x, y, atol, rtol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
 @inline check_approx(x, y, atol) = norm(x-y) <= atol
-
-using Statistics
 
 function custom_bisection(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, abstol=sqrt(eps(max(cur_a,cur_b))) ) where T
   # cur_s = zero(T)
