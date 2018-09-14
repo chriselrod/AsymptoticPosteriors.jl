@@ -307,14 +307,3 @@ function custom_bisection_old(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, cur
     bad_streak
   )
 end#cur_c::Number=NaN, cur_f_c::Number=NaN, cur_d::Number=NaN, cur_f_d::Number=NaN, bad_streak
-
-
-using BenchmarkTools
-f(x) = exp(x) - abs2(abs2(x))
-a, b = 8.0, 9.0
-fa, fb = f(a), f(b)
-custom_bisection(f, a, b, fa, fb)
-custom_bisection_old(f, a, b, fa, fb)
-
-@benchmark custom_bisection(f, $a, $b, $fa, $fb)
-@benchmark custom_bisection_old(f, $a, $b, $fa, $fb)

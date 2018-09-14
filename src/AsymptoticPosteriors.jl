@@ -9,13 +9,10 @@ using   LinearAlgebra, # special functions and LinearAlgebra ought to be clear e
         jBLAS,
         DifferentiableObjects,
         Statistics
-# import  Optim,
-        # NLSolversBase,
-        # LineSearches,
+        
 import  ForwardDiff,#, StaticArrays, DiffEqDiffTools # import, so namespace access is explicit
         DiffResults
 
-# const LinearAlgebra = Compat.LinearAlgebra
 
 export AsymptoticPosterior, mode
 
@@ -27,13 +24,9 @@ debug() = false
 debug_rootsearch() = false
 
 include("function_wrappers.jl")
-# include("differentiable_objects.jl")
-# include("false_position.jl")
 include("brent.jl")
 include("nested.jl")
 include("initial_root_search.jl")
-# include("linalg.jl")
 # include("plot_recipes.jl")
-# include("types.jl")
 
 end # module
