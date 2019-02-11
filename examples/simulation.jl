@@ -1,25 +1,24 @@
 
 using Distributed
 # addprocs(8);
-addprocs(4);
+# addprocs(4);
 # addprocs(16);
+addprocs((Sys.CPU_THREADS >> 1) + (1 - nprocs()) # master, and 1 slave for every 2 threads
 
-
-@everywhere begin
-using Statistics, SIMDArrays
-using AsymptoticPosteriors, Parameters, Rmath
-using Base.Cartesian, Random, LinearAlgebra
-# using Pkg
-# include(joinpath(dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
-end
+# @everywhere begin
+#
+# # using Pkg
+# # include(joinpath(dir("AsymptoticPosteriors"), "examples/NGSCov.jl"));
+# end
 @everywhere begin
 # include("/home/chris/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
-include("/home/chriselrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
+includet("/home/chriselrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
 # include("/home/celrod/.julia/dev/AsymptoticPosteriors/examples/NGSCov.jl")
 # using DifferentiableObjects
 
-const truth = CorrErrors((0.15, 0.4), (0.9, 0.95), (0.85,0.97));
-const data = NoGoldData(truth,160,320,52);
+const truth = CorrErrors((0.15, 0.4), (0.9, 0.95), (0.85,0.97), (0.6, 0.2));
+const data = NoGoldDataCorr(truth,160,320,52);
+const datacorr = NoGoldData(truth,160,320,52);
 x = randnsimd(6);
 end
 @everywhere begin

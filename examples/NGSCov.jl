@@ -1,4 +1,6 @@
-
+using Statistics, SIMDArrays
+using AsymptoticPosteriors, Parameters, Rmath
+using Base.Cartesian, Random, LinearAlgebra
 
 @inline beta_lpdf(x, alpha, beta) = (alpha-1)*log(x) + (beta-1)*log(1-x)
 
@@ -38,7 +40,7 @@ end
 function NoGoldStandardCorr(priordata, S₁::T, S₂::T, C₁::T, C₂::T, ρₛ::T, ρc::T, π::Vararg{T,K}) where {T,K}
     @unpack n, απ, βπ, αS1, βS1, αS2, βS2, αC1, βC1, αC2, βC2 = priordata
     target = beta_lpdf(S₁, αS1, βS1) + beta_lpdf(S₂, αS2, βS2) + beta_lpdf(C₁, αC1, βC1) + beta_lpdf(C₂, αC2, βC2) - 4ρₛ - 4ρc#exponential priors.
-    
+
     omS₁, omS₂, omC₁, omC₂ = 1-S₁, 1-S₂, 1-C₁, 1-C₂
     S₁S₂ = S₁*S₂
     Sₐ = S₁ + S₂ - S₁S₂
@@ -522,11 +524,7 @@ end
 interval(ap, alpha, ind) = (quantile(ap,alpha/2,ind), quantile(ap,1-alpha/2,ind))
 four_num_sum(ap, ind) = (quantile(ap,0.025,ind), quantile(ap,0.25,ind), quantile(ap,0.75,ind), quantile(ap,0.975,ind))
 function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs=4) where {N,T}
-    @static if VERSION < v"0.7-"
-        sig(x, s) = signif(x, s)
-    else
-        sig(x, s) = round(x, sigdigits = s)
-    end
+    sig(x, s) = round(x, sigdigits = s)
     println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
     println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
     println("C1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, sigfigs))
@@ -535,22 +533,24 @@ function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs
         println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+4)), sigfigs))
     end
 end
-# function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T,NoGoldDataCorr{N}}; sigfigs=4) where {N,T}
-#     @static if VERSION < v"0.7-"
-#         sig(x, s) = signif(x, s)
-#     else
-#         sig(x, s) = round(x, sigdigits = s)
-#     end
-#     println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
-#     println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
-#     println("C1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, sigfigs))
-#     println("C2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 4)) .+1) ./ 2, sigfigs))
-#     println("Cov1:\t\t\t\t", sig.(exp.(four_num_sum(ap, 5)), sigfigs))
-#     println("Cov2:\t\t\t\t", sig.(exp.(four_num_sum(ap, 6)), sigfigs))
-#     for i in 1:N-6
-#         println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+6)), sigfigs))
-#     end
-# end
+function corrsummary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs=4) where {N,T}
+    sig(x, s) = round(x, sigdigits = s)
+    println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
+    println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
+    println("C1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, sigfigs))
+    println("C2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 4)) .+1) ./ 2, sigfigs))
+    println("Cov1:\t\t\t\t", sig.(exp.(four_num_sum(ap, 5)), sigfigs))
+    println("Cov2:\t\t\t\t", sig.(exp.(four_num_sum(ap, 6)), sigfigs))
+    for i in 1:N-6
+        println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+6)), sigfigs))
+    end
+end
+function corrsummarytup(ap::AsymptoticPosteriors.AsymptoticPosterior{8,T}) where {T}
+    (inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, (inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2,
+    (inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, (inv_logit.(four_num_sum(ap, 4)) .+1) ./ 2,
+    exp.(four_num_sum(ap, 5)), exp.(four_num_sum(ap, 6)),
+    inv_logit.(four_num_sum(ap, 7)), inv_logit.(four_num_sum(ap, 8))
+end
 
 
 
@@ -584,6 +584,3 @@ end
 # n_small_4c  = NoGoldDataCorr(corr_errors_dependent4,100,200,16,αS1=αS1,βS1=βS1,αS2=αS2,βS2=βS2,αC1=αC1,βC1=βC1,αC2=αC2,βC2=βC2);
 # n_medium_4c = NoGoldDataCorr(corr_errors_dependent4,400,800,64,αS1=αS1,βS1=βS1,αS2=αS2,βS2=βS2,αC1=αC1,βC1=βC1,αC2=αC2,βC2=βC2);
 # n_big_4c    = NoGoldDataCorr(corr_errors_dependent4,1600,3200,252,αS1=αS1,βS1=βS1,αS2=αS2,βS2=βS2,αC1=αC1,βC1=βC1,αC2=αC2,βC2=βC2);
-
-
-
