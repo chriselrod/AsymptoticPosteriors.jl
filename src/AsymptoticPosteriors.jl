@@ -4,17 +4,21 @@ module AsymptoticPosteriors
 
 using   LinearAlgebra, # special functions and LinearAlgebra ought to be clear enough.
         SpecialFunctions,
-        SIMD,
-        SIMDArrays,
-        jBLAS,
+        PaddedMatrices, VectorizationBase, SIMDPirates,
         DifferentiableObjects,
-        Statistics
+        Statistics,
+        ForwardDiff, DiffResults
         
-import  ForwardDiff,#, StaticArrays, DiffEqDiffTools # import, so namespace access is explicit
-        DiffResults
+# import  
+
+using PaddedMatrices: AbstractFixedSizePaddedVector,
+                    AbstractMutableFixedSizePaddedVector,
+                    AbstractMutableFixedSizePaddedMatrix,
+                    MutableFixedSizePaddedVector
+using DifferentiableObjects: AbstractDifferentiableObject
 
 
-export AsymptoticPosterior, mode
+export AsymptoticPosteriorFD, mode
 
 # const SizedArray{P,T} = Union{SizedSIMDVector{P,T}, }
 
@@ -25,7 +29,10 @@ debug_rootsearch() = false
 
 include("function_wrappers.jl")
 include("brent.jl")
-include("nested.jl")
+include("MAP.jl")
+include("AsymptoticPosteriorInterface.jl")
+include("AsymptoticPosteriorConstructors.jl")
+# include("nested.jl")
 include("initial_root_search.jl")
 # include("plot_recipes.jl")
 

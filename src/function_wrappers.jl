@@ -6,13 +6,13 @@
 
 struct ProfileWrapper{P,F,T1,T2,R}#,C<:AbstractArray}
     f::F
-    x::SizedSIMDVector{P,T1,R,R}
-    y::SizedSIMDVector{P,T2,R,R}
+    x::MutableFixedSizePaddedVector{P,T1,R,R}
+    y::MutableFixedSizePaddedVector{P,T2,R,R}
     # z::C
     i::Base.RefValue{Int}
     v::Base.RefValue{T1}
 end
-function (pw::ProfileWrapper{P,F,T})(x::SizedSIMDVector{Pm1,T}) where {P,Pm1,F,T}
+function (pw::ProfileWrapper{P,F,T})(x::PaddedMatrices.AbstractMutableFixedSizePaddedVector{Pm1,T}) where {P,Pm1,F,T}
     debug() && @show x
     @inbounds begin
         for i in 1:pw.i[]-1
@@ -27,7 +27,7 @@ function (pw::ProfileWrapper{P,F,T})(x::SizedSIMDVector{Pm1,T}) where {P,Pm1,F,T
     - pw.f(pw.x)
 end
 
-function (pw::ProfileWrapper{P,F,T,T2})(y::SizedSIMDVector{Pm1,T2}) where {P,Pm1,F,T,T2}
+function (pw::ProfileWrapper{P,F,T,T2})(y::PaddedMatrices.AbstractMutableFixedSizePaddedVector{Pm1,T2}) where {P,Pm1,F,T,T2}
     # @show y
     @inbounds begin
         for i in 1:pw.i[]-1
@@ -42,7 +42,7 @@ function (pw::ProfileWrapper{P,F,T,T2})(y::SizedSIMDVector{Pm1,T2}) where {P,Pm1
     - pw.f(pw.y)
 end
 
-function set!(pw::ProfileWrapper, v, i::Int)
+function set_profile_val_ind!(pw::ProfileWrapper, v, i::Int)
     pw.v[] = v
     pw.i[] = i
     @inbounds pw.x[i] = v
@@ -59,3 +59,14 @@ function (s::Swap{P})(x) where P
     - s.f(x)
 end
 Swap(f::F, ::Val{P}) where {F,P} = Swap{P,F}(f,Ref(P))
+
+function swappable_twice_differentiable(f, ::Val{P}) where {P}
+    TwiceDifferentiable(Swap(f, Val{P}()), Val{P}())
+end
+
+# struct Swappable{P,D <: DifferentiableObjects.AbstractTwiceDifferentiableObject{P}}
+#     obj::D
+#     i::Base.RefValue{Int}
+# end
+
+

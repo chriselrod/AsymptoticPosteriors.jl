@@ -8,7 +8,7 @@
 @inline check_approx(x, y, atol, rtol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
 @inline check_approx(x, y, atol) = norm(x-y) <= atol
 
-function custom_bisection(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, abstol=sqrt(eps(max(cur_a,cur_b))) ) where T
+function custom_bisection(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, abstol=sqrt(eps(max(cur_a,cur_b))) ) where {T}
   # cur_s = zero(T)
   local cur_s::T
   cur_d, cur_f_d = T(NaN), T(NaN)
@@ -139,7 +139,7 @@ end#cur_c::Number=NaN, cur_f_c::Number=NaN, cur_d::Number=NaN, cur_f_d::Number=N
 
 
 
-function custom_bisection_old(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, cur_flag::Bool=true, abstol::Number=sqrt(eps(max(cur_a,cur_b))), cur_c::T=NaN, cur_f_c::T=NaN, cur_d::T=NaN, cur_f_d::T=NaN, bad_streak::Integer=0) where T
+function custom_bisection_old(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, cur_flag::Bool=true, abstol::Number=sqrt(eps(max(cur_a,cur_b))), cur_c::T=NaN, cur_f_c::T=NaN, cur_d::T=NaN, cur_f_d::T=NaN, bad_streak::Integer=0) where {T}
   init_a = cur_a
   init_b = cur_b
 

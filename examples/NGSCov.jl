@@ -1,4 +1,4 @@
-using Statistics, SIMDArrays
+using Statistics, PaddedMatrices
 using AsymptoticPosteriors, Parameters, Rmath
 using Base.Cartesian, Random, LinearAlgebra
 
@@ -523,7 +523,7 @@ end
 
 interval(ap, alpha, ind) = (quantile(ap,alpha/2,ind), quantile(ap,1-alpha/2,ind))
 four_num_sum(ap, ind) = (quantile(ap,0.025,ind), quantile(ap,0.25,ind), quantile(ap,0.75,ind), quantile(ap,0.975,ind))
-function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs=4) where {N,T}
+function Base.summary(ap::AsymptoticPosteriorFD{N,T}; sigfigs=4) where {N,T}
     sig(x, s) = round(x, sigdigits = s)
     println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
     println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
@@ -533,7 +533,7 @@ function Base.summary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs
         println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+4)), sigfigs))
     end
 end
-function corrsummary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs=4) where {N,T}
+function corrsummary(ap::AsymptoticPosteriorFD{N,T}; sigfigs=4) where {N,T}
     sig(x, s) = round(x, sigdigits = s)
     println("S1:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, sigfigs))
     println("S2:\t\t\t\t", sig.((inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2, sigfigs))
@@ -545,7 +545,7 @@ function corrsummary(ap::AsymptoticPosteriors.AsymptoticPosterior{N,T}; sigfigs=
         println("Population $i proportion:\t", sig.(inv_logit.(four_num_sum(ap, i+6)), sigfigs))
     end
 end
-function corrsummarytup(ap::AsymptoticPosteriors.AsymptoticPosterior{8,T}) where {T}
+function corrsummarytup(ap::AsymptoticPosteriorFD{8,T}) where {T}
     (inv_logit.(four_num_sum(ap, 1)) .+1) ./ 2, (inv_logit.(four_num_sum(ap, 2)) .+1) ./ 2,
     (inv_logit.(four_num_sum(ap, 3)) .+1) ./ 2, (inv_logit.(four_num_sum(ap, 4)) .+1) ./ 2,
     exp.(four_num_sum(ap, 5)), exp.(four_num_sum(ap, 6)),

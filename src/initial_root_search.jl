@@ -10,19 +10,19 @@ function convergence(xn0, xn1, fxn1, abstol, reltol)
 end #on ifelse: isn't there going to be a branch anyway when the calling program checks whether this returned true/faslse?
 
 
-@inline function initial_conditions(ap::AsymptoticPosterior, i = profile_ind(ap))
+@inline function initial_conditions(ap::AbstractAsymptoticPosterior, i = profile_ind(ap))
     @inbounds begin
-        fx0 = ap.rstar[]
-        x0 = ap.map.θhat[i]
-        x1 = x0 + fx0 * ap.map.std_estimates[i] # inverse slope
+        fx0 = rstar(ap)
+        x0 = mode(ap, i)
+        x1 = x0 + fx0 * std_estimates(ap,i) # inverse slope
     end
+    debug_rootsearch() && @show fx0, x0, x1
     fx1, s = fdf_adjrstar_p(ap, x1, i, Val{true}())
-
     x0, fx0, x1, fx1, s
 
 end
 
-function linear_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
+function linear_search(ap::AbstractAsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
     x0, fx0, x1, fx1, s = initial_conditions(ap, i)
     ϵ = eps(max(abs(x0),abs(x1)))
     abstol, reltol = √ϵ, ∛ϵ
@@ -33,14 +33,14 @@ function linear_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where 
     # end
     norm(fx1) <= convergenceλ(x1, abstol, reltol) && return x1
 
-    debug_rootsearch() && @show ((x0 - x1) / (fx1 - fx0), 1/s)
+    debug_rootsearch() && @show ((x0 - x1) / (fx1 - fx0), 1 / s)
     debug_rootsearch() && @show x1 + fx1 / s
-    debug_rootsearch() && @show x1 + fx1 * (x0 - x1) / (fx1 - fx0)
+    debug_rootsearch() && @show x1 + (fx1 * (x0 - x1)) / (fx1 - fx0)
     # x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
     x1, x0 = x1 + fx1 / s, x1
     debug_rootsearch() && @show x1
 
-    debug_rootsearch() && @show ap.rstar[]
+    debug_rootsearch() && @show rstar(ap)
     fx0 = fx1
     fx1, s = fdf_adjrstar_p(ap, x1, i, Val{false}())
     debug_rootsearch() && @show fx1, ap(x1, i)
@@ -115,7 +115,7 @@ function update(x0, x1, x2, fx0, fx1, fx2)
 end
 
 
-function quadratic_search(ap::AsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
+function quadratic_search(ap::AbstractAsymptoticPosterior{P,T}, i = profile_ind(ap)) where {P,T}
     x0, fx0, x1, fx1, s = initial_conditions(ap, i)
 
     abstol, reltol = 4eps(T), cbrt(eps(T))
