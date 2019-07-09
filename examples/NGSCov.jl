@@ -34,8 +34,6 @@ function NoGoldStandard(priordata, S₁::T, S₂::T, C₁::T, C₂::T, π::Varar
     target
 end
 
-
-
 """Log Density of the No Gold-Standard Model, with correlations on log-odds scale"""
 function NoGoldStandardCorr(priordata, S₁::T, S₂::T, C₁::T, C₂::T, ρₛ::T, ρc::T, π::Vararg{T,K}) where {T,K}
     @unpack n, απ, βπ, αS1, βS1, αS2, βS2, αC1, βC1, αC2, βC2 = priordata
@@ -270,7 +268,7 @@ end
 # end
 
 
-gen_data(Θ::CorrErrors{P}, n_common, n_1_only, n_2_only) where P = gen_data!(Matrix{Int}(undef, 8, P), Θ, n_common, n_1_only, n_2_only)
+gen_data(Θ::CorrErrors{P}, n_common, n_1_only, n_2_only) where {P} = gen_data!(Matrix{Int}(undef, 8, P), Θ, n_common, n_1_only, n_2_only)
 function gen_data!(out::Matrix{Int}, Θ::CorrErrors{P,T}, n_common::Int, n_1_only::Int, n_2_only::Int) where {P,T}
     for i ∈ 1:P
         cum_p = zero(T)
@@ -285,7 +283,7 @@ function gen_data!(out::Matrix{Int}, Θ::CorrErrors{P,T}, n_common::Int, n_1_onl
         out[4,i] = n - x
         x = rbinom(1, n_1_only, Θ.p_marginal1[i])[1]
         out[5,i] = x
-        out[6,i] = n_1_only -x
+        out[6,i] = n_1_only - x
         x = rbinom(1, n_2_only, Θ.p_marginal2[i])[1]
         out[7,i] = x
         out[8,i] = n_2_only - x
@@ -369,7 +367,6 @@ end
     βC2::Float64 = 2.0 # βC2
 end
 
-
 function generate_call_transform(fname, n)
     # verind = VERSION > v"0.6.9" ? 3 : 2
     out = quote
@@ -393,6 +390,7 @@ function generate_call_transform(fname, n)
     end
     out
 end
+
 @generated function NGS(data::NoGoldData{N}, params::AbstractVector{T}) where {N,T}
     call = generate_call_transform(:NoGoldStandard, N )
 #    Nm4 = N - 4
@@ -404,7 +402,6 @@ end
         target
     end
 end
-
 
 function generate_call_transformc(fname, n)
     out = quote
@@ -474,10 +471,13 @@ end
 function NoGoldDataCorr(::Val{N}; kwargs...) where {N}
     NoGoldDataCorr{N}(; kwargs...)
 end
-
 function resample!(data::NGD{N}, Θ, n_common, n_1_only, n_2_only) where N
     gen_data!(data.n, Θ, n_common, n_1_only, n_2_only)
 end
+#function resample!(data::NGDC{N}, Θ, n_common, n_1_only, n_2_only) where N
+#    gen_data!(data.n, Θ, n_common, n_1_only, n_2_only)
+#end
+
 
 # n_small_2  = NoGoldData(corr_errors_independent2,  100,  200,  16);
 # n_medium_2 = NoGoldData(corr_errors_independent2,  400,  800,  64);

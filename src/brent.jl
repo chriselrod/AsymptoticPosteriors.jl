@@ -8,11 +8,11 @@
 @inline check_approx(x, y, atol, rtol) = norm(x-y) <= atol + rtol*max(norm(x), norm(y))
 @inline check_approx(x, y, atol) = norm(x-y) <= atol
 
-function custom_bisection(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, abstol=sqrt(eps(max(cur_a,cur_b))) ) where {T}
+function custom_bisection(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, abstol=sqrt(eps(max(cur_a,cur_b))) , cur_flag = true) where {T}
   # cur_s = zero(T)
   local cur_s::T
   cur_d, cur_f_d = T(NaN), T(NaN)
-  cur_flag = true
+  
   cur_c = middle(cur_a, cur_b)
   cur_f_c = f(cur_c)
   # for iter = 1:100
@@ -52,14 +52,14 @@ function custom_bisection(f, cur_a::T, cur_b::T, cur_f_a::T, cur_f_b::T, abstol=
       end
 
       if is_good_a
-        cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, cur_flag, abstol)
+        cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, abstol, cur_flag)
         isnan(cur_root) &&
-          ( cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, cur_flag, abstol) )
+          ( cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, abstol, cur_flag) )
         return cur_root
       else
-        cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, cur_flag, abstol)
+        cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, abstol, cur_flag)
         isnan(cur_root) &&
-          ( cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, cur_flag, abstol) )
+          ( cur_root = custom_bisection(f, cur_a, cur_b, cur_f_a, cur_f_b, abstol, cur_flag) )
         return cur_root
       end
     end
