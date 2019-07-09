@@ -49,7 +49,7 @@ function MAPFD(f, initial_x::MutableFixedSizePaddedVector{P,T}) where {T,P}
 
     od = swappable_twice_differentiable(f, Val(P))
 
-    state = DifferentiableObjects.BFGSState2(Val(P))
+    state = DifferentiableObjects.BFGSState(Val(P))
     backtrack = DifferentiableObjects.BackTracking2(Val(2))#order 2 backtrack
 
     Lfull = zero(MutableFixedSizePaddedMatrix{P,P,T})

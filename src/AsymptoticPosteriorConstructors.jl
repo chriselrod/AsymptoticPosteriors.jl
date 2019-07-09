@@ -31,7 +31,7 @@ function AsymptoticPosteriorFD(f, map_::MAPFD, initial_x::MutableFixedSizePadded
 
     backtrack = DifferentiableObjects.BackTracking2(Val(2)) # order 2 backtrack vs 3
     # state = DifferentiableObjects.uninitialized_state(nuisance)
-    state = DifferentiableObjects.BFGSState2(ValPm1)
+    state = DifferentiableObjects.BFGSState(ValPm1)
     od = ProfileDifferentiable(f, DifferentiableObjects.ref_x_old(state), Val{P}())
 
     Lsmall = PrePaddedMatrix(ValPm1,ValPm1,T)
