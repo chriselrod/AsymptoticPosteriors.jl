@@ -167,8 +167,8 @@ function profile_correction_quote(P, R, T)
     #     for ps ∈ max(1,pb):min( pb+VL-1, P-2 )
     for pb ∈ VL-pad:VL:P-2
         for ps ∈ pb:min( pb+VL-1, P-2 )
-            push!(qa, :(@inbounds $(sym(:vH,ps)) = $V(hess[$(ps+1),$P])))
-            push!(qa, :(@inbounds $(sym(:vG,ps)) = $V(grad[$(ps+1)])))
+            push!(qa, :(@inbounds $(sym(:vH,ps)) = SIMDPirates.vbroadcast($V,hess[$(ps+1),$P])))
+            push!(qa, :(@inbounds $(sym(:vG,ps)) = SIMDPirates.vbroadcast($V,grad[$(ps+1)])))
             for r ∈ itermin:iter-1
                 push!(qa, :($(sym(:vL,r)) = vload($V, ptr_Li + $(r*VLT + sizeof(T)*R*ps))))
                 push!(qa, :($(sym(:vHL,r)) = SIMDPirates.vmuladd($(sym(:vH,ps)),$(sym(:vL,r)),$(sym(:vHL,r))) ))
