@@ -40,12 +40,12 @@ function AsymptoticPosteriorFD(f, map_::MAPFD, initial_x::MutableFixedSizePadded
 end
 function AsymptoticPosteriorFD(od::D, method::M, state::S, map_::MAP, Lsmall::SM) where {P,T,Pm1,R,D<:AbstractDifferentiableObject{Pm1,T},M,S,MAP <: MAPFD{P,T,R},SV <: PaddedMatrices.AbstractMutableFixedSizePaddedVector{Pm1,T},R2,SM <: MutableFixedSizePaddedMatrix{R2,Pm1,T}}
 
-    AsymptoticPosteriorFD{P,T,Pm1,R,D,M,S,MAP,R2,SM}(od, method, state, map_, Ref{T}(), Ref{T}(), Lsmall)#, @view(hessian(map_)[1:P-1,1:P-1]))
+    AsymptoticPosteriorFD{P,T,Pm1,R,D,M,S,MAP,R2,SM}(od, method, state, map_, Ref{T}(), Ref{T}(), Ref{T}(), Lsmall)#, @view(hessian(map_)[1:P-1,1:P-1]))
 end
 
 # Convenience function does a dynamic dispatch if we don't start with a MutableFixedSizePaddedVector
 # If we have a static arrays dependency, we may also support static dispatches with that?
-function AsymptoticPosteriorFD(f, initial_x::AbstractArray{T}) where T
+function AsymptoticPosteriorFD(f, initial_x::AbstractArray{T}) where {T}
     AsymptoticPosteriorFD(f, MutableFixedSizePaddedVector{length(initial_x),T}(initial_x))
 end
 

@@ -158,7 +158,7 @@ end
 # function CorrErrors(π::NTuple{p,T}, S::Tuple{T,T}, C::Tuple{T,T}, covsc::Tuple{T,T} = (0.0,0.0)) where {p,T}
 #     CorrErrors{p,T}(SVector(π), SVector(S), SVector(C), SVector(covsc))
 # end
-struct CorrErrors{P,T<: Real,PP}
+mutable struct CorrErrors{P,T<: Real,PP}
     π::NTuple{P,T}
     S::NTuple{2,T}
     C::NTuple{2,T}
@@ -174,6 +174,9 @@ function CorrErrors(π::NTuple{P,T}, S::Tuple{T,T}, C::Tuple{T,T}, covsc::Tuple{
     p_ind = common_p(π, S, C, (0.0,0.0))
     CorrErrors(π, S, C, covsc, break_sticks.(p), break_sticks.(p_ind), p_i(π, S, C, 1), p_i(π, S, C, 2), unconstrain(π, S, C, covsc))
 end
+#function Random.rand!(t::CoreErrors{P,T,PP})
+#    
+#end
 # function CorrErrors
 @generated function unconstrain(π::NTuple{P}, S::NTuple{2}, C::NTuple{2}, covsc::NTuple{2}) where P
     PP = P+6
@@ -354,7 +357,7 @@ abstract type NGD{N} end
     βC2::Float64 = 1.0 # βC2
 end
 @with_kw struct NoGoldDataCorr{N} <: NGD{N}
-    n::Matrix{Int}
+    n::Matrix{Float64}
     απ::Float64 = 1.0 # απ
     βπ::Float64 = 1.0 # βπ
     αS1::Float64 = 38.0 # αS1

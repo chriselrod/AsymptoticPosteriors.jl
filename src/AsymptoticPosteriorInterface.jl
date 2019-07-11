@@ -9,6 +9,7 @@ struct AsymptoticPosteriorFD{P,T,Pm1,R,D<:AbstractDifferentiableObject{Pm1,T},M,
     map::MAP
     nlmax::Base.RefValue{T}
     rstar::Base.RefValue{T}
+    α::Base.RefValue{T}
     Lsmall::SM
 end
 
@@ -19,6 +20,12 @@ end
 @inline setswap!(ap::AsymptoticPosteriorFD, i) = ap.map.od.config.f.i[] = i
 @inline rstar(ap::AsymptoticPosteriorFD) = ap.rstar[]
 @inline rstar!(ap::AsymptoticPosteriorFD{P,T}, v::T) where {P,T} = (ap.rstar[] = v)
+@inline α(ap::AsymptoticPosteriorFD) = ap.α[]
+@inline function α!(ap::AsymptoticPosteriorFD{P,T}, v::T) where {P,T}
+    ap.α[] = v
+    rstar!(ap, Φ⁻¹(v))
+    v
+end
 @inline mode(ap::AsymptoticPosteriorFD) = ap.map.θhat
 @inline mode(ap::AsymptoticPosteriorFD, i::Integer) = @inbounds ap.map.θhat[i]
 @inline std_estimates(ap::AsymptoticPosteriorFD) = ap.map.std_estimates
@@ -49,7 +56,15 @@ Each call must refer to the same piece of memory.
 
 @inline base_adjustment(ap::AsymptoticPosteriorFD) = ap.map.base_adjust[]
 
-@inline delta_log_likelihood(ap::AbstractAsymptoticPosterior) = nl_profile_max(ap) - nl_max(ap)
+@inline function delta_log_likelihood(ap::AbstractAsymptoticPosterior)
+    return nl_profile_max(ap) - nl_max(ap)
+#=    δ = nl_profile_max(ap) - nl_max(ap)
+    if δ < 0
+        @warn "δ log likelihood = $δ < 0, returning 0."
+        return zero(δ)
+    end
+    δ=#
+end
 
 @inline profile_lower_triangle(ap::AsymptoticPosteriorFD) = ap.Lsmall 
 
@@ -107,7 +122,7 @@ function rp(ap::AsymptoticPosteriorFD, x, i = profile_ind(ap))
     copysign( sqrt(2(delta_log_likelihood(ap))), mode(ap, i) - x)
 end
 
-function rstar_p(ap::AbstractAsymptoticPosterior, theta, i::Int=profile_ind(ap))
+function rstar_p(ap::AbstractAsymptoticPosterior, theta::Number, i::Int=profile_ind(ap))
 
     profilepdf(ap, theta, i)
     set_buffer_to_profile!(ap, i)
@@ -190,9 +205,10 @@ Calculates the quadratic form of grad' * Li' * Li * hess[1:end-1,end]
     profile_correction_quote(Pm1+1, R, T)
 end
 
-function fdf_adjrstar_p(ap::AbstractAsymptoticPosterior{P,T}, theta, p_i::Int=profile_ind(ap),
-                    ::Val{reset_search_start} = Val{true}()) where {P,T,reset_search_start}
-
+function fdf_adjrstar_p(
+    ap::AbstractAsymptoticPosterior{P,T}, theta, p_i::Int=profile_ind(ap),
+    ::Val{reset_search_start} = Val{true}()
+) where {P,T,reset_search_start}
 
     profilepdf(ap, theta, p_i, Val{reset_search_start}())
     set_buffer_to_profile!(ap, p_i)
@@ -211,9 +227,33 @@ function fdf_adjrstar_p(ap::AbstractAsymptoticPosterior{P,T}, theta, p_i::Int=pr
     prof_factor = profile_correction(Li, grad, hess)
     hess_adjust = rootdet * base_adjustment(ap)
     @inbounds q = (prof_factor - grad[P]) * hess_adjust
-
+#    @show r, q, delta_log_like, rootdet, base_adjustment(ap), hess_adjust
     r⭐ = r + log(q/r)/r
-    r⭐ + rstar(ap), exp(T(0.5)*abs2(r⭐)-delta_log_like) / hess_adjust
+#    r⭐ + rstar(ap), exp(T(0.5)*abs2(r⭐)-delta_log_like) / hess_adjust#, exp(-delta_log_like) / hess_adjust
+    1 - Φ(r⭐) - α(ap), exp(-delta_log_like) / (Base.FastMath.sqrt_fast(2π) * rootdet * base_adjustment(ap))
+#    Φ(r⭐ + rstar(ap)), exp(delta_log_like) / (Base.FastMath.sqrt_fast(2π) * rootdet * base_adjustment(ap))
+end
+
+function cdf(
+    ap::AbstractAsymptoticPosterior{P,T}, theta, p_i::Int=profile_ind(ap),
+    ::Val{reset_search_start} = Val{true}()
+) where {P,T,reset_search_start}
+
+    profilepdf(ap, theta, p_i, Val{reset_search_start}())
+    set_buffer_to_profile!(ap, p_i)
+    setswap!(ap, p_i)
+    hess = hessian!(ap)
+    delta_log_like = delta_log_likelihood(ap)
+    @inbounds r = copysign( sqrt((T(2))*delta_log_like), mode(ap, p_i) - theta)
+    grad = gradient(ap)
+    Li = profile_lower_triangle(ap)
+    rootdet = PaddedMatrices.invcholdetLLc!(Li, hess)
+    prof_factor = profile_correction(Li, grad, hess)
+    hess_adjust = rootdet * base_adjustment(ap)
+    @inbounds q = (prof_factor - grad[P]) * hess_adjust
+    r⭐ = r + log(q/r)/r
+
+    1 - Φ(r⭐)
 end
 @generated function subhessian(H::AbstractMutableFixedSizePaddedMatrix{P,P,T,R}) where {P,T,R}
     Pm1 = P - 1
@@ -235,7 +275,7 @@ function pdf(ap::AbstractAsymptoticPosterior{P,T,Pm1}, theta, i = profile_ind(ap
     # rootdet = PaddedMatrices.choldet!(hessian(ap), Val{Pm1}())
     # isfinite(rootdet) ? exp(delta_log_likelihood(ap)) / (sqrt(2π) * rootdet * base_adjustment(ap)) : T(Inf)
     rootdet, success = PaddedMatrices.safecholdet!(subhessian(hessian(ap)))
-    success ? exp(delta_log_likelihood(ap)) / (sqrt(2π) * rootdet * base_adjustment(ap)) : T(Inf)
+    success ? exp(-delta_log_likelihood(ap)) / (sqrt(2π) * rootdet * base_adjustment(ap)) : T(-Inf)
 end
 
 
@@ -265,15 +305,18 @@ function set_buffer_to_profile!(ap::AbstractAsymptoticPosterior{P}, i = profile_
     nothing
 end
 
-Φ⁻¹(x::T) where T = Base.FastMath.sqrt_fast(T(2))*erfinv(muladd(T(2),x,T(-1)))
+Φ(x::T) where {T} = muladd(T(0.5), erf( x / Base.FastMath.sqrt_fast(2) ), T(0.5))
+Φ⁻¹(x::T) where {T} = Base.FastMath.sqrt_fast(T(2))*erfinv(muladd(T(2),x,T(-1)))
 function Statistics.quantile(ap::AbstractAsymptoticPosterior, alpha, i)
     profile_ind!(ap, i)
-    rstar!(ap, Φ⁻¹(alpha))
+    α!(ap, alpha)
+#    rstar!(ap, Φ⁻¹(alpha))
     # quadratic_search(ap, i)
     linear_search(ap, profile_ind(ap))
 end
 function Statistics.quantile(ap::AbstractAsymptoticPosterior, alpha)
-    rstar!(ap, Φ⁻¹(alpha))
+    α!(ap, alpha)
+#    rstar!(ap, Φ⁻¹(alpha))
     linear_search(ap, profile_ind(ap))
     # quadratic_search(ap, profile_ind(ap))
 end
@@ -282,21 +325,24 @@ end
 export lquantile, qquantile
 function lquantile(ap::AbstractAsymptoticPosterior, alpha, i)
     profile_ind!(ap, i)
-    rstar!(ap, Φ⁻¹(alpha))
+    α!(ap, alpha)
     linear_search(ap, i)
 end
 function lquantile(ap::AbstractAsymptoticPosterior, alpha)
-    rstar!(ap, Φ⁻¹(alpha))
+    α!(ap, alpha)
+#    rstar!(ap, Φ⁻¹(alpha))
     linear_search(ap, profile_ind(ap))
 end
 
 function qquantile(ap::AbstractAsymptoticPosterior, alpha, i)
     profile_ind!(ap, i)
-    rstar!(ap, Φ⁻¹(alpha))
+    α!(ap, alpha)
+#    rstar!(ap, Φ⁻¹(alpha))
     quadratic_search(ap, i)
 end
 function qquantile(ap::AbstractAsymptoticPosterior, alpha)
-    rstar!(ap, Φ⁻¹(alpha))
+    α!(ap, alpha)
+#    rstar!(ap, Φ⁻¹(alpha))
     quadratic_search(ap, profile_ind(ap))
 end
 

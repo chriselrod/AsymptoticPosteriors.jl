@@ -37,7 +37,7 @@ function linear_search(ap::AbstractAsymptoticPosterior{P,T}, i = profile_ind(ap)
     debug_rootsearch() && @show x1 + fx1 / s
     debug_rootsearch() && @show x1 + (fx1 * (x0 - x1)) / (fx1 - fx0)
     # x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
-    x1, x0 = x1 + fx1 / s, x1
+    x1, x0 = x1 - fx1 / s, x1
     debug_rootsearch() && @show x1
 
     debug_rootsearch() && @show rstar(ap)
@@ -52,7 +52,7 @@ function linear_search(ap::AbstractAsymptoticPosterior{P,T}, i = profile_ind(ap)
     # Keep using quadratic approximations until either convergence or signs flip.
     while not_converged && signbit(fx0) == signbit(fx1)
         # x1, x0 = x1 + fx1 * (x0 - x1) / (fx1 - fx0), x1
-        x1, x0 = x1 + fx1 / s, x1
+        x1, x0 = x1 - fx1 / s, x1
         # fx1, fx0 = ap(x1, i), fx1
         fx0 = fx1
         fx1, s = fdf_adjrstar_p(ap, x1, i, Val{false}())
@@ -64,7 +64,7 @@ function linear_search(ap::AbstractAsymptoticPosterior{P,T}, i = profile_ind(ap)
         debug_rootsearch() && @show (x1, fx1, ap(x1, i))
         # reset_state!(ap.state, x1, x0, fx1, fx0)
         # x1 = ap.state.xn1
-        x1 = custom_bisection(ap, x1, x0, fx1, fx0, abstol)
+        x1 = custom_bisection(ap, x1, x0, Φ⁻¹(1 - α(ap) - fx1) + rstar(ap), Φ⁻¹(1 - α(ap) - fx0) + rstar(ap), abstol)
         # fx1 = ap.state.fx1
     end
 
