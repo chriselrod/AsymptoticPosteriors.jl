@@ -56,14 +56,23 @@ Each call must refer to the same piece of memory.
 
 @inline base_adjustment(ap::AsymptoticPosteriorFD) = ap.map.base_adjust[]
 
-@inline function delta_log_likelihood(ap::AbstractAsymptoticPosterior)
-    return nl_profile_max(ap) - nl_max(ap)
-#=    δ = nl_profile_max(ap) - nl_max(ap)
+function refit!(ap::AbstractAsymptoticPosterior{P}) where {P}
+    i = profile_ind(ap)
+    setswap!(ap, P)
+    fit!(ap.map, ap.od.config.f.x)
+    setswap!(ap, i)
+end
+
+@inline function delta_log_likelihood(ap::AbstractAsymptoticPosterior)#{P}) where {P}
+#    return nl_profile_max(ap) - nl_max(ap)
+    δ = nl_profile_max(ap) - nl_max(ap)
     if δ < 0
-        @warn "δ log likelihood = $δ < 0, returning 0."
-        return zero(δ)
+        refit!(ap)
+        return delta_log_likelihood(ap)
+#        @warn "δ log likelihood = $δ < 0, returning 0."
+#        return zero(δ)
     end
-    δ=#
+    δ
 end
 
 @inline profile_lower_triangle(ap::AsymptoticPosteriorFD) = ap.Lsmall 
@@ -134,7 +143,9 @@ function rstar_p(ap::AbstractAsymptoticPosterior, theta::Number, i::Int=profile_
     debug() && @show hessian(ap)
 
     r = rp(ap, theta, i)
-    r + log(qb(ap, theta, i)/r)/r
+    q = qb(ap, theta, i)
+#    @show r, q
+    r + log(q/r)/r
 end
 
 sym(a,i) = Symbol(a, :_, i)
@@ -236,7 +247,7 @@ end
 
 function cdf(
     ap::AbstractAsymptoticPosterior{P,T}, theta, p_i::Int=profile_ind(ap),
-    ::Val{reset_search_start} = Val{true}()
+    ::Val{reset_search_start} = Val{true}(), tries = 0
 ) where {P,T,reset_search_start}
 
     profilepdf(ap, theta, p_i, Val{reset_search_start}())
@@ -251,6 +262,14 @@ function cdf(
     prof_factor = profile_correction(Li, grad, hess)
     hess_adjust = rootdet * base_adjustment(ap)
     @inbounds q = (prof_factor - grad[P]) * hess_adjust
+    if sign(q) != sign(r)
+        refit!(ap)
+        if tries > 10
+            @warn "Tried refitting 10 times."
+            return -Inf
+        end
+        return cdf(ap, theta, p_i, Val{reset_search_start}(), tries + 1)
+    end
     r⭐ = r + log(q/r)/r
 
     1 - Φ(r⭐)

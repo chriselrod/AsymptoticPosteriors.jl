@@ -4,10 +4,10 @@
 # excessive recompilation.
 
 
-struct ProfileWrapper{P,F,T1,T2,R}#,C<:AbstractArray}
+struct ProfileWrapper{P,F,T1,T2,R1,R2}#,C<:AbstractArray}
     f::F
-    x::MutableFixedSizePaddedVector{P,T1,R,R}
-    y::MutableFixedSizePaddedVector{P,T2,R,R}
+    x::MutableFixedSizePaddedVector{P,T1,R1,R1}
+    y::MutableFixedSizePaddedVector{P,T2,R2,R2}
     # z::C
     i::Base.RefValue{Int}
     v::Base.RefValue{T1}
