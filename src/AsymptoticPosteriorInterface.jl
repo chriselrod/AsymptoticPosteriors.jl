@@ -220,7 +220,7 @@ end
 
 function fdf_adjrstar_p(
     ap::AbstractAsymptoticPosterior{P,T}, theta, p_i::Int=profile_ind(ap),
-    ::Val{reset_search_start} = Val{true}()
+    ::Val{reset_search_start} = Val{true}(), repeats = 0
 ) where {P,T,reset_search_start}
 
     profilepdf(ap, theta, p_i, Val{reset_search_start}())
@@ -242,8 +242,9 @@ function fdf_adjrstar_p(
     @inbounds q = (prof_factor - grad[P]) * hess_adjust
     #    @show r, q, delta_log_like, rootdet, base_adjustment(ap), hess_adjust
     if sign(q)  != sign(r)
+        repeats > 10 && return T(-Inf)
         refit!(ap)
-        return fdf_adjrstar_p(ap, theta, p_i, Val{reset_search_start}())
+        return fdf_adjrstar_p(ap, theta, p_i, Val{reset_search_start}(), repeats + 1)
     end
     r⭐ = r + log(q/r)/r
 #    r⭐ + rstar(ap), exp(T(0.5)*abs2(r⭐)-delta_log_like) / hess_adjust#, exp(-delta_log_like) / hess_adjust
