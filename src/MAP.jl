@@ -17,6 +17,7 @@ end
 @inline gradient(map_::MAPFD) = map_.od.config.result.grad
 @inline hessian(map_::MAPFD) = DiffResults.hessian(map_.od.config.result)
 
+@inline Lfull(map_::MAPFD) = map_.Lfull
 
 
 fit!(map_::MAPFD) = fit!(map_, map_.buffer)
@@ -31,7 +32,7 @@ function fit!(map_::MAPFD{P,T}, initial_x::AbstractFixedSizePaddedVector{P,T}) w
 
     # @show inv(hessian(map_))
     # @show hessian(map_)
-    map_.base_adjust[] = PaddedMatrices.invcholdetLLi!(map_.Lfull, hessian(map_))
+    map_.base_adjust[] = PaddedMatrices.invcholdetLLi!(Lfull(map_), hessian(map_))
     # @fastmath @inbounds for i ∈ 1:P
     @inbounds for i ∈ 1:P
         varᵢ = map_.Lfull[i,i] * map_.Lfull[i,i]

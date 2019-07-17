@@ -55,6 +55,8 @@ Each call must refer to the same piece of memory.
 @inline nuisance_parameters(ap::AsymptoticPosteriorFD) = DifferentiableObjects.ref_x_old(ap.state)
 
 @inline base_adjustment(ap::AsymptoticPosteriorFD) = ap.map.base_adjust[]
+@inline base_adjustment!(ap::AsymptoticPosteriorFD, v) = (ap.map.base_adjust[] = v)
+@inline Lfull(ap::AsymptoticPosteriorFD) = ap.map.Lfull
 
 function refit!(ap::AbstractAsymptoticPosterior{P}) where {P}
     i = profile_ind(ap)
@@ -238,7 +240,11 @@ function fdf_adjrstar_p(
     prof_factor = profile_correction(Li, grad, hess)
     hess_adjust = rootdet * base_adjustment(ap)
     @inbounds q = (prof_factor - grad[P]) * hess_adjust
-#    @show r, q, delta_log_like, rootdet, base_adjustment(ap), hess_adjust
+    #    @show r, q, delta_log_like, rootdet, base_adjustment(ap), hess_adjust
+    if sign(q)  != sign(r)
+        refit!(ap)
+        return fdf_adjrstar_p(ap, theta, p_i, Val{reset_search_start}())
+    end
     r⭐ = r + log(q/r)/r
 #    r⭐ + rstar(ap), exp(T(0.5)*abs2(r⭐)-delta_log_like) / hess_adjust#, exp(-delta_log_like) / hess_adjust
     1 - Φ(r⭐) - α(ap), exp(-delta_log_like) / (Base.FastMath.sqrt_fast(2π) * rootdet * base_adjustment(ap))
