@@ -2,7 +2,7 @@
 abstract type AbstractAsymptoticPosterior{P,T,Pm1,R} <: AbstractDifferentiableObject{P,T} end
 
 struct AsymptoticPosteriorFD{P,T,Pm1,R,D<:AbstractDifferentiableObject{Pm1,T},M,S,MAP <: MAPFD{P,T,R},
-                            R2,SM <: MutableFixedSizePaddedMatrix{R2,Pm1,T}} <: AbstractAsymptoticPosterior{P,T,Pm1,R}
+                            R2,SM <: MutableFixedSizeMatrix{R2,Pm1,T}} <: AbstractAsymptoticPosterior{P,T,Pm1,R}
     od::D
     method::M
     state::S
@@ -42,7 +42,7 @@ end
 @inline nl_max(ap::AsymptoticPosteriorFD) = ap.map.nlmax[]
 @inline nl_max!(ap::AsymptoticPosteriorFD{P,T}, v::T) where {P,T} = (ap.map.nlmax[] = v)
 
-@inline fit!(ap::AsymptoticPosteriorFD{P,T}, x::AbstractFixedSizePaddedVector{P,T}) where {P,T} = fit!(ap.map, x)
+@inline fit!(ap::AsymptoticPosteriorFD{P,T}, x::AbstractFixedSizeVector{P,T}) where {P,T} = fit!(ap.map, x)
 
 """
 initial_val_buffer(ap::AbstractAsymptoticPosterior{P,T}) where {P,T}
@@ -213,8 +213,8 @@ end
 """
 Calculates the quadratic form of grad' * Li' * Li * hess[1:end-1,end]
 """
-@generated function profile_correction(Li::PaddedMatrices.AbstractMutableFixedSizePaddedMatrix{R,Pm1,T,R},
-                        grad::PaddedMatrices.AbstractFixedSizePaddedVector, hess::PaddedMatrices.AbstractFixedSizePaddedMatrix) where {Pm1,T,R}
+@generated function profile_correction(Li::PaddedMatrices.AbstractMutableFixedSizeMatrix{R,Pm1,T,R},
+                        grad::PaddedMatrices.AbstractFixedSizeVector, hess::PaddedMatrices.AbstractFixedSizeMatrix) where {Pm1,T,R}
     profile_correction_quote(Pm1+1, R, T)
 end
 
@@ -281,7 +281,7 @@ function cdf(
 
     1 - Φ(r⭐)
 end
-@generated function subhessian(H::AbstractMutableFixedSizePaddedMatrix{P,P,T,R}) where {P,T,R}
+@generated function subhessian(H::AbstractMutableFixedSizeMatrix{P,P,T,R}) where {P,T,R}
     Pm1 = P - 1
     quote
         $(Expr(:meta,:inline))

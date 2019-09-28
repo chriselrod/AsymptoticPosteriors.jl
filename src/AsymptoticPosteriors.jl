@@ -11,10 +11,10 @@ using   LinearAlgebra, # special functions and LinearAlgebra ought to be clear e
         
 # import  
 
-using PaddedMatrices: AbstractFixedSizePaddedVector,
-                    AbstractMutableFixedSizePaddedVector,
-                    AbstractMutableFixedSizePaddedMatrix,
-                    MutableFixedSizePaddedVector
+using PaddedMatrices: AbstractFixedSizeVector,
+                    AbstractMutableFixedSizeVector,
+                    AbstractMutableFixedSizeMatrix,
+                    MutableFixedSizeVector
 using DifferentiableObjects: AbstractDifferentiableObject
 
 

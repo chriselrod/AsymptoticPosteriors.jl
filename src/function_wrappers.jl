@@ -6,13 +6,13 @@
 
 struct ProfileWrapper{P,F,T1,T2,R1,R2}#,C<:AbstractArray}
     f::F
-    x::MutableFixedSizePaddedVector{P,T1,R1,R1}
-    y::MutableFixedSizePaddedVector{P,T2,R2,R2}
+    x::MutableFixedSizeVector{P,T1,R1,R1}
+    y::MutableFixedSizeVector{P,T2,R2,R2}
     # z::C
     i::Base.RefValue{Int}
     v::Base.RefValue{T1}
 end
-function (pw::ProfileWrapper{P,F,T})(x::PaddedMatrices.AbstractMutableFixedSizePaddedVector{Pm1,T}) where {P,Pm1,F,T}
+function (pw::ProfileWrapper{P,F,T})(x::PaddedMatrices.AbstractMutableFixedSizeVector{Pm1,T}) where {P,Pm1,F,T}
     debug() && @show x
     @inbounds begin
         for i in 1:pw.i[]-1
@@ -27,7 +27,7 @@ function (pw::ProfileWrapper{P,F,T})(x::PaddedMatrices.AbstractMutableFixedSizeP
     - pw.f(pw.x)
 end
 
-function (pw::ProfileWrapper{P,F,T,T2})(y::PaddedMatrices.AbstractMutableFixedSizePaddedVector{Pm1,T2}) where {P,Pm1,F,T,T2}
+function (pw::ProfileWrapper{P,F,T,T2})(y::PaddedMatrices.AbstractMutableFixedSizeVector{Pm1,T2}) where {P,Pm1,F,T,T2}
     # @show y
     @inbounds begin
         for i in 1:pw.i[]-1

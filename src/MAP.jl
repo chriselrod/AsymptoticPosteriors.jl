@@ -7,11 +7,11 @@ struct MAPFD{P,T,R,D<:DifferentiableObjects.AbstractDifferentiableObject{P},M,S,
     method::M
     state::S
     θhat::PaddedMatrices.PtrVector{P,T,R,R}
-    buffer::MutableFixedSizePaddedVector{P,T,R,R}
+    buffer::MutableFixedSizeVector{P,T,R,R}
     nlmax::Base.RefValue{T}
     base_adjust::Base.RefValue{T}
-    std_estimates::MutableFixedSizePaddedVector{P,T,R,R}
-    Lfull::MutableFixedSizePaddedMatrix{P,P,T,R,L}
+    std_estimates::MutableFixedSizeVector{P,T,R,R}
+    Lfull::MutableFixedSizeMatrix{P,P,T,R,L}
 end
 @inline setswap!(map_::MAPFD, i) = map_.od.config.f.i[] = i
 @inline gradient(map_::MAPFD) = map_.od.config.result.grad
@@ -21,7 +21,7 @@ end
 
 
 fit!(map_::MAPFD) = fit!(map_, map_.buffer)
-function fit!(map_::MAPFD{P,T}, initial_x::AbstractFixedSizePaddedVector{P,T}) where {P,T}
+function fit!(map_::MAPFD{P,T}, initial_x::AbstractFixedSizeVector{P,T}) where {P,T}
     setswap!(map_, P)
     # DifferentiableObjects.initial_state!(map_.state, map_.method, map_.od, initial_x)
     scaled_nlmax, scale = optimize_scale!(map_.state, map_.od, initial_x, map_.method, one(T))
@@ -46,20 +46,20 @@ function fit!(map_::MAPFD{P,T}, initial_x::AbstractFixedSizePaddedVector{P,T}) w
     map_
 end
 
-function MAPFD(f, initial_x::MutableFixedSizePaddedVector{P,T}) where {T,P}
+function MAPFD(f, initial_x::MutableFixedSizeVector{P,T}) where {T,P}
 
     od = swappable_twice_differentiable(f, Val(P))
 
     state = DifferentiableObjects.BFGSState(Val(P))
     backtrack = DifferentiableObjects.BackTracking2(Val(2))#order 2 backtrack
 
-    Lfull = zero(MutableFixedSizePaddedMatrix{P,P,T})
+    Lfull = zero(MutableFixedSizeMatrix{P,P,T})
 
     map_ = MAPFD(od, backtrack, state, DifferentiableObjects.ref_x_old(state), similar(initial_x), Ref{T}(), Ref{T}(), PaddedMatrices.mutable_similar(initial_x), Lfull)
 end
-function MAPFD(od::D, method::M, state::S, θhat::MutableFixedSizePaddedVector{P,T},
-                buffer::MutableFixedSizePaddedVector{P,T}, nlmax::Base.RefValue{T},
-                base_adjust::Base.RefValue{T}, std_estimates::MutableFixedSizePaddedVector{P,T},
-                Lfull::MutableFixedSizePaddedMatrix{P,P,T,R,L}) where {P,T,R,D<:DifferentiableObjects.AbstractDifferentiableObject{P},M,S,L}
+function MAPFD(od::D, method::M, state::S, θhat::MutableFixedSizeVector{P,T},
+                buffer::MutableFixedSizeVector{P,T}, nlmax::Base.RefValue{T},
+                base_adjust::Base.RefValue{T}, std_estimates::MutableFixedSizeVector{P,T},
+                Lfull::MutableFixedSizeMatrix{P,P,T,R,L}) where {P,T,R,D<:DifferentiableObjects.AbstractDifferentiableObject{P},M,S,L}
     MAPFD{P,T,R,D,M,S,L}(od, method, state, θhat, buffer, nlmax, base_adjust, std_estimates, Lfull)
 end
